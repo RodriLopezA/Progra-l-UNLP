@@ -239,6 +239,12 @@ button {
   font-size: 24px;
 }
 
+.duo-metric {
+  background:
+    linear-gradient(180deg, rgba(88, 204, 2, 0.12), rgba(255, 255, 255, 0.82)),
+    #ffffff;
+}
+
 .path-summary {
   display: grid;
   gap: 8px;
@@ -258,6 +264,21 @@ button {
 .path-summary p {
   margin: 0;
   line-height: 1.4;
+}
+
+.duo-progress {
+  height: 9px;
+  overflow: hidden;
+  background: rgba(248, 250, 245, 0.24);
+  border-radius: 999px;
+}
+
+.duo-progress span {
+  display: block;
+  height: 100%;
+  background: #58cc02;
+  border-radius: inherit;
+  transition: width 220ms ease;
 }
 
 .panel-heading {
@@ -635,6 +656,13 @@ button {
 
 .action-bar .exam {
   background: #b14d36;
+}
+
+.action-bar .complete-button {
+  color: #17211f;
+  background: #58cc02;
+  box-shadow: 0 4px 0 #3c9700;
+  font-weight: 950;
 }
 
 .action-bar .quiet {
@@ -1156,6 +1184,34 @@ button {
     #fffaf0;
 }
 
+.duo-status-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.duo-status-card div {
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(21, 26, 24, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(21, 26, 24, 0.06);
+}
+
+.duo-status-card span {
+  color: #66716b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.duo-status-card strong {
+  color: #173f36;
+  font-size: 20px;
+}
+
 .mission-card {
   display: flex;
   align-items: center;
@@ -1247,6 +1303,90 @@ button {
 .mission-list {
   display: grid;
   gap: 8px;
+}
+
+.duo-lesson-path {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.lesson-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: min(520px, 92%);
+  padding: 12px;
+  text-align: left;
+  color: #17211f;
+  background: #ffffff;
+  border: 2px solid rgba(21, 26, 24, 0.08);
+  border-radius: 18px;
+  cursor: pointer;
+  box-shadow: 0 8px 0 #d7dfd2;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.lesson-node.left {
+  justify-self: start;
+  margin-left: 8%;
+}
+
+.lesson-node.right {
+  justify-self: end;
+  margin-right: 8%;
+}
+
+.lesson-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 0 #c8d3c2;
+}
+
+.lesson-node small {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: #ffffff;
+  background: #58cc02;
+  border-radius: 50%;
+  box-shadow: inset 0 -5px 0 rgba(0, 0, 0, 0.16);
+  font-weight: 950;
+}
+
+.lesson-node span {
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.lesson-node em {
+  padding: 6px 9px;
+  color: #315449;
+  background: #e3efe1;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.lesson-node.completed {
+  border-color: rgba(88, 204, 2, 0.38);
+  background: #f3ffe9;
+}
+
+.lesson-node.completed small {
+  background: #1cb0f6;
+}
+
+.lesson-node.active {
+  border-color: #f3be48;
+  box-shadow: 0 8px 0 #c88d24;
 }
 
 .mission-row {
@@ -1709,7 +1849,8 @@ button {
   }
 
   .coach-grid,
-  .path-lower-grid {
+  .path-lower-grid,
+  .duo-status-card {
     grid-template-columns: 1fr;
   }
 
@@ -1783,6 +1924,20 @@ button {
   .mission-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .lesson-node,
+  .lesson-node.left,
+  .lesson-node.right {
+    justify-self: stretch;
+    width: 100%;
+    margin: 0;
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .lesson-node em {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .mission-card button {

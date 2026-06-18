@@ -14,12 +14,15 @@ import {
   loadAttempts,
   loadCode,
   loadHistory,
+  loadStudyStats,
   loadTrace,
   resetCode,
   saveAttempt,
   saveCode,
   saveErrors,
+  saveStudyStats,
   saveTrace,
+  type StudyStats,
 } from "./lib/storage";
 import { getTutorReply, type TutorAction } from "./lib/tutor";
 import type { ChatMessage, ErrorRecord, ExamAttempt, Exercise, RubricCheck } from "./types";
@@ -76,6 +79,27 @@ function formatTimer(seconds: number) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
   const rest = (seconds % 60).toString().padStart(2, "0");
   return `${minutes}:${rest}`;
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function yesterdayKey() {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function updateStreak(stats: StudyStats) {
+  const today = todayKey();
+  if (stats.lastStudyDate === today) return stats;
+
+  return {
+    ...stats,
+    streak: stats.lastStudyDate === yesterdayKey() ? stats.streak + 1 : 1,
+    lastStudyDate: today,
+  };
 }
 
 function buildPlanBlock(exercise: Exercise) {
@@ -210,6 +234,7 @@ function App() {
   const [hintsUsed, setHintsUsed] = useState(0);
   const [history, setHistory] = useState<ErrorRecord[]>(() => loadHistory());
   const [attempts, setAttempts] = useState<ExamAttempt[]>(() => loadAttempts());
+  const [studyStats, setStudyStats] = useState<StudyStats>(() => loadStudyStats());
   const [tutorMode, setTutorMode] = useState<TutorMode>("rules");
   const [geminiKey, setGeminiKey] = useState(
     () => localStorage.getItem("p1unlp:gemini-key") ?? "",
@@ -264,6 +289,11 @@ function App() {
   const stageExamExercises = selectedStage.examExercises
     .map((id) => exercises.find((exercise) => exercise.id === id))
     .filter((exercise): exercise is Exercise => Boolean(exercise));
+  const completedInStage = stageExercises.filter((exercise) =>
+    studyStats.completedLessons.includes(exercise.id),
+  ).length;
+  const stageProgress =
+    stageExercises.length === 0 ? 0 : Math.round((completedInStage / stageExercises.length) * 100);
 
   useEffect(() => {
     setCode(loadCode(selectedExercise.id, selectedExercise.starterCode));
@@ -438,6 +468,16 @@ function App() {
 
     const savedHistory = saveErrors(reply.errors);
     if (savedHistory.length > 0) setHistory(savedHistory);
+    if (action === "correct" || action === "exam") {
+      setStudyStats((current) => {
+        const next = updateStreak({
+          ...current,
+          hearts: reply.errors.length > 0 ? Math.max(0, current.hearts - 1) : current.hearts,
+          xp: current.xp + (reply.errors.length === 0 ? 5 : 2),
+        });
+        return saveStudyStats(next);
+      });
+    }
     appendTutorMessage(labels[action], reply.text);
   };
 
@@ -608,8 +648,39 @@ function App() {
 
     setAttempts(nextAttempts);
     if (savedHistory.length > 0) setHistory(savedHistory);
+    setStudyStats((current) => {
+      const next = updateStreak({
+        ...current,
+        xp: current.xp + Math.max(5, result.score * 3),
+        gems: current.gems + (result.score >= 7 ? 3 : 1),
+        hearts: result.score < 5 ? Math.max(0, current.hearts - 1) : current.hearts,
+      });
+      return saveStudyStats(next);
+    });
     setSimRunning(false);
     appendTutorMessage("Entregar simulacro", result.message);
+  };
+
+  const completeCurrentLesson = () => {
+    const alreadyCompleted = studyStats.completedLessons.includes(selectedExercise.id);
+    const earnedXp = alreadyCompleted ? 5 : selectedExercise.level === "desafio" ? 25 : 15;
+    const nextStats = updateStreak({
+      ...studyStats,
+      xp: studyStats.xp + earnedXp,
+      gems: studyStats.gems + (alreadyCompleted ? 0 : 2),
+      hearts: Math.min(5, studyStats.hearts + (evaluation.score >= 8 ? 1 : 0)),
+      completedLessons: alreadyCompleted
+        ? studyStats.completedLessons
+        : [...studyStats.completedLessons, selectedExercise.id],
+    });
+
+    setStudyStats(saveStudyStats(nextStats));
+    appendTutorMessage(
+      "Completar leccion",
+      alreadyCompleted
+        ? `Repaso completado. Sumaste ${earnedXp} XP extra.`
+        : `Leccion completada. Sumaste ${earnedXp} XP y avanzaste en el camino.`,
+    );
   };
 
   const exportAttempt = () => {
@@ -629,6 +700,7 @@ function App() {
     clearStudyData();
     setHistory([]);
     setAttempts([]);
+    setStudyStats(loadStudyStats());
     setCode(selectedExercise.starterCode);
     appendTutorMessage("Borrar progreso", "Borre intentos, errores, trazas y codigo guardado.");
   };
@@ -729,6 +801,18 @@ function App() {
         </nav>
 
         <section className="metric-grid">
+          <div className="metric duo-metric">
+            <span>XP</span>
+            <strong>{studyStats.xp}</strong>
+          </div>
+          <div className="metric duo-metric">
+            <span>Racha</span>
+            <strong>{studyStats.streak}</strong>
+          </div>
+          <div className="metric duo-metric">
+            <span>Vidas</span>
+            <strong>{studyStats.hearts}</strong>
+          </div>
           <div className="metric">
             <span>Niveles</span>
             <strong>{learningPath.length}</strong>
@@ -746,10 +830,13 @@ function App() {
         <section className="panel path-summary">
           <div className="panel-heading">
             <h2>Camino actual</h2>
-            <span>Nivel {selectedStage.level}</span>
+            <span>{stageProgress}%</span>
           </div>
           <strong>{selectedStage.title}</strong>
           <p>{selectedStage.subtitle}</p>
+          <div className="duo-progress">
+            <span style={{ width: `${stageProgress}%` }} />
+          </div>
         </section>
 
         <section className="panel">
@@ -904,6 +991,8 @@ function App() {
             score={evaluation.score}
             history={history}
             attempts={attempts}
+            studyStats={studyStats}
+            stageProgress={stageProgress}
             onOpenExercise={openExerciseFromPath}
           />
         ) : viewMode === "progreso" ? (
@@ -937,6 +1026,9 @@ function App() {
                 />
 
                 <div className="action-bar">
+                  <button className="complete-button" onClick={completeCurrentLesson}>
+                    Completar leccion
+                  </button>
                   <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
                     Pista
                   </button>
@@ -1356,6 +1448,8 @@ function PathPanel({
   score,
   history,
   attempts,
+  studyStats,
+  stageProgress,
   onOpenExercise,
 }: {
   stages: LearningStage[];
@@ -1369,6 +1463,8 @@ function PathPanel({
   score: number;
   history: ErrorRecord[];
   attempts: ExamAttempt[];
+  studyStats: StudyStats;
+  stageProgress: number;
   onOpenExercise: (exerciseId: string, reason: string) => void;
 }) {
   const currentIndex = stageExercises.findIndex((exercise) => exercise.id === currentExercise.id);
@@ -1405,8 +1501,8 @@ function PathPanel({
     <section className="path-board">
       <aside className="level-map">
         <div className="level-map-head">
-          <span>Ruta completa</span>
-          <strong>Nivel maximo: parcial</strong>
+          <span>Mapa de unidades</span>
+          <strong>{studyStats.xp} XP - racha {studyStats.streak}</strong>
         </div>
         {stages.map((stage) => (
           <button
@@ -1421,6 +1517,25 @@ function PathPanel({
       </aside>
 
       <div className="path-main">
+        <section className="duo-status-card">
+          <div>
+            <span>Racha</span>
+            <strong>{studyStats.streak} dias</strong>
+          </div>
+          <div>
+            <span>Vidas</span>
+            <strong>{studyStats.hearts}/5</strong>
+          </div>
+          <div>
+            <span>Gemas</span>
+            <strong>{studyStats.gems}</strong>
+          </div>
+          <div>
+            <span>Unidad</span>
+            <strong>{stageProgress}%</strong>
+          </div>
+        </section>
+
         <section className="mission-card">
           <div>
             <span className="eyebrow">Tutor inteligente</span>
@@ -1461,13 +1576,23 @@ function PathPanel({
 
         <section className="path-section">
           <div className="section-title">
-            <span>Misiones de este nivel</span>
-            <small>De menor a mayor dificultad</small>
+            <span>Lecciones de la unidad</span>
+            <small>Toca un circulo para practicar</small>
           </div>
-          <div className="mission-list">
-            {stageExercises.map((exercise, index) => (
+          <div className="duo-lesson-path">
+            {stageExercises.map((exercise, index) => {
+              const completed = studyStats.completedLessons.includes(exercise.id);
+              const current = exercise.id === currentExercise.id;
+              return (
               <button
-                className={exercise.id === currentExercise.id ? "mission-row active" : "mission-row"}
+                className={[
+                  "lesson-node",
+                  completed ? "completed" : "",
+                  current ? "active" : "",
+                  index % 2 === 0 ? "left" : "right",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 key={exercise.id}
                 onClick={() =>
                   onOpenExercise(
@@ -1476,11 +1601,12 @@ function PathPanel({
                   )
                 }
               >
-                <small>{index + 1}</small>
+                <small>{completed ? "OK" : index + 1}</small>
                 <span>{exercise.title}</span>
                 <em>{exercise.level}</em>
               </button>
-            ))}
+              );
+            })}
           </div>
         </section>
 
