@@ -42,6 +42,42 @@ button {
     linear-gradient(135deg, #f7f8f1 0%, #e8f0e8 48%, #f5efe7 100%);
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+.mini-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px;
+  background: #121a18;
+  border-right: 1px solid rgba(248, 250, 245, 0.08);
+  flex-direction: column;
+}
+
+.mini-rail button {
+  width: 42px;
+  min-height: 42px;
+  padding: 4px;
+  color: #dfe9de;
+  background: rgba(248, 250, 245, 0.08);
+  border: 1px solid rgba(248, 250, 245, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.mini-rail button:hover {
+  color: #17211f;
+  background: #f3be48;
+}
+
 .onboarding {
   position: fixed;
   inset: 0;
@@ -344,6 +380,48 @@ button {
   padding: 24px;
 }
 
+.focus-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.focus-controls button {
+  min-height: 34px;
+  padding: 0 11px;
+  color: #17211f;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(21, 26, 24, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.focus-controls .focus-primary {
+  color: #f8faf5;
+  background: #17211f;
+}
+
+.workspace-chrome {
+  display: grid;
+  gap: 14px;
+}
+
+.top-collapsed .workspace {
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.top-collapsed .focus-controls {
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(255, 252, 244, 0.7);
+  border: 1px solid rgba(21, 26, 24, 0.08);
+  border-radius: 999px;
+}
+
 .topbar {
   display: flex;
   align-items: start;
@@ -578,6 +656,15 @@ button {
   min-height: 0;
   overflow: hidden;
   flex: 1;
+}
+
+.top-collapsed .study-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+}
+
+.top-collapsed .editor-panel,
+.top-collapsed .chat-panel-main {
+  min-height: 0;
 }
 
 .editor-panel,
@@ -1593,6 +1680,20 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-rail {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    flex-direction: row;
+    justify-content: center;
+    border-right: 0;
+    border-bottom: 1px solid rgba(248, 250, 245, 0.08);
+  }
+
   .workspace,
   .study-grid,
   .path-board,
@@ -1645,7 +1746,8 @@ button {
   .brief,
   .sim-panel,
   .tool-toggle-bar,
-  .automation-bar {
+  .automation-bar,
+  .focus-controls {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1659,6 +1761,7 @@ button {
 
   .tool-toggle,
   .automation-bar button,
+  .focus-controls button,
   .back-button {
     justify-content: center;
     width: 100%;

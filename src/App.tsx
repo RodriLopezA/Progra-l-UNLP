@@ -187,6 +187,8 @@ function App() {
   );
   const [viewMode, setViewMode] = useState<ViewMode>("camino");
   const [returnView, setReturnView] = useState<ViewMode | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [topPanelsOpen, setTopPanelsOpen] = useState(true);
   const [selectedStageId, setSelectedStageId] = useState(learningPath[0].id);
   const [selectedPracticeId, setSelectedPracticeId] = useState(practices[0].id);
   const [visiblePanels, setVisiblePanels] = useState<Record<ToolPanelKey, boolean>>({
@@ -486,6 +488,17 @@ function App() {
     setReturnView(null);
   };
 
+  const enterFocusMode = () => {
+    setViewMode("estudio");
+    setSidebarOpen(false);
+    setTopPanelsOpen(false);
+  };
+
+  const showFullLayout = () => {
+    setSidebarOpen(true);
+    setTopPanelsOpen(true);
+  };
+
   const insertPlanInCode = () => {
     if (code.includes("PLAN GUIADO")) {
       appendTutorMessage("Armar plan", "Ya tenes un plan guiado en el codigo. Completa esos puntos antes de agregar mas.");
@@ -641,7 +654,15 @@ function App() {
   };
 
   return (
-    <main className="app-shell">
+    <main
+      className={[
+        "app-shell",
+        sidebarOpen ? "" : "sidebar-collapsed",
+        topPanelsOpen ? "" : "top-collapsed",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {showOnboarding && (
         <section className="onboarding">
           <div className="onboarding-card">
@@ -674,6 +695,15 @@ function App() {
           </div>
         </section>
       )}
+      {!sidebarOpen && (
+        <aside className="mini-rail" aria-label="Menu compacto">
+          <button onClick={() => setSidebarOpen(true)}>Menu</button>
+          <button onClick={() => setViewMode("camino")}>Camino</button>
+          <button onClick={() => setViewMode("estudio")}>Codigo</button>
+          <button onClick={showFullLayout}>Todo</button>
+        </aside>
+      )}
+
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">P1</span>
@@ -781,68 +811,85 @@ function App() {
       </aside>
 
       <section className="workspace">
-        <header className="topbar">
-          <div>
-            <span className="source">
-              {viewMode === "camino"
-                ? "Camino Tutor adaptativo"
-                : viewMode === "practicas"
-                  ? "Trabajos practicos de catedra"
-                  : selectedExercise.source}
-            </span>
-            <h2>
-              {viewMode === "camino"
-                ? selectedStage.title
-                : viewMode === "practicas"
-                  ? selectedPractice.title
-                  : selectedExercise.title}
-            </h2>
-          </div>
-          <div className="topbar-actions">
-            {viewMode === "estudio" && returnView && (
-              <button className="back-button" onClick={goBackToReturnView}>
-                Volver a {viewLabels[returnView]}
-              </button>
-            )}
-            <span className="timer">{formatTimer(secondsLeft)}</span>
-            <div className="status-pill">
-              <span className={tutorMode === "rules" ? "dot online" : "dot warn"} />
-              {isThinking ? "Pensando" : tutorMode === "rules" ? "Tutor local" : "Gemini"}
-            </div>
-          </div>
-        </header>
-
-        <section className="brief">
-          <p>
-            {viewMode === "camino"
-              ? selectedStage.goal
-              : viewMode === "practicas"
-              ? "Ruta guiada para aprender desde cero: primero concepto, despues mini-practica, despues errores tipicos y finalmente un parcial relacionado."
-              : selectedExercise.statement}
-          </p>
-          <div className="brief-tags">
-            {viewMode === "camino" ? (
-              <>
-                <span>Nivel {selectedStage.level}/5</span>
-                <span>{stageExercises.length} misiones</span>
-                <span>{stageExamExercises.length} parciales meta</span>
-              </>
-            ) : viewMode === "practicas" ? (
-              <>
-                <span>{practices.length} practicas</span>
-                <span>{selectedPractice.focus}</span>
-                <span>sin soluciones automaticas</span>
-              </>
-            ) : (
-              <>
-                <span>{selectedExercise.exam}</span>
-                <span>{getExamInfo(selectedExercise.exam).label}</span>
-                <span>{selectedExercise.topic}</span>
-                <span>{selectedExercise.minutes} min</span>
-              </>
-            )}
-          </div>
+        <section className="focus-controls">
+          <button onClick={() => setSidebarOpen((current) => !current)}>
+            {sidebarOpen ? "Ocultar menu" : "Mostrar menu"}
+          </button>
+          <button onClick={() => setTopPanelsOpen((current) => !current)}>
+            {topPanelsOpen ? "Ocultar arriba" : "Mostrar arriba"}
+          </button>
+          <button className="focus-primary" onClick={enterFocusMode}>
+            Solo codigo + tutor
+          </button>
+          <button onClick={showFullLayout}>Ver todo</button>
         </section>
+
+        {topPanelsOpen && (
+          <section className="workspace-chrome">
+            <header className="topbar">
+              <div>
+                <span className="source">
+                  {viewMode === "camino"
+                    ? "Camino Tutor adaptativo"
+                    : viewMode === "practicas"
+                      ? "Trabajos practicos de catedra"
+                      : selectedExercise.source}
+                </span>
+                <h2>
+                  {viewMode === "camino"
+                    ? selectedStage.title
+                    : viewMode === "practicas"
+                      ? selectedPractice.title
+                      : selectedExercise.title}
+                </h2>
+              </div>
+              <div className="topbar-actions">
+                {viewMode === "estudio" && returnView && (
+                  <button className="back-button" onClick={goBackToReturnView}>
+                    Volver a {viewLabels[returnView]}
+                  </button>
+                )}
+                <span className="timer">{formatTimer(secondsLeft)}</span>
+                <div className="status-pill">
+                  <span className={tutorMode === "rules" ? "dot online" : "dot warn"} />
+                  {isThinking ? "Pensando" : tutorMode === "rules" ? "Tutor local" : "Gemini"}
+                </div>
+              </div>
+            </header>
+
+            <section className="brief">
+              <p>
+                {viewMode === "camino"
+                  ? selectedStage.goal
+                  : viewMode === "practicas"
+                    ? "Ruta guiada para aprender desde cero: primero concepto, despues mini-practica, despues errores tipicos y finalmente un parcial relacionado."
+                    : selectedExercise.statement}
+              </p>
+              <div className="brief-tags">
+                {viewMode === "camino" ? (
+                  <>
+                    <span>Nivel {selectedStage.level}/5</span>
+                    <span>{stageExercises.length} misiones</span>
+                    <span>{stageExamExercises.length} parciales meta</span>
+                  </>
+                ) : viewMode === "practicas" ? (
+                  <>
+                    <span>{practices.length} practicas</span>
+                    <span>{selectedPractice.focus}</span>
+                    <span>sin soluciones automaticas</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{selectedExercise.exam}</span>
+                    <span>{getExamInfo(selectedExercise.exam).label}</span>
+                    <span>{selectedExercise.topic}</span>
+                    <span>{selectedExercise.minutes} min</span>
+                  </>
+                )}
+              </div>
+            </section>
+          </section>
+        )}
 
         {viewMode === "camino" ? (
           <PathPanel
@@ -878,40 +925,44 @@ function App() {
           />
         ) : (
           <>
-            <ToolPanelToggles visiblePanels={visiblePanels} onToggle={togglePanel} />
-            <AutomationBar
-              onAutoPilot={runAutoPilot}
-              onPlan={insertPlanInCode}
-              onScaffold={insertSmartScaffold}
-              onTrace={prepareAutomaticTrace}
-              onNext={openNextRecommended}
-            />
+            {topPanelsOpen && (
+              <>
+                <ToolPanelToggles visiblePanels={visiblePanels} onToggle={togglePanel} />
+                <AutomationBar
+                  onAutoPilot={runAutoPilot}
+                  onPlan={insertPlanInCode}
+                  onScaffold={insertSmartScaffold}
+                  onTrace={prepareAutomaticTrace}
+                  onNext={openNextRecommended}
+                />
 
-            <div className="action-bar">
-              <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
-                Pista
-              </button>
-              <button disabled={isThinking} onClick={() => runTutorAction("correct")}>
-                Corregir
-              </button>
-              <button disabled={isThinking} onClick={() => runTutorAction("trace")}>
-                Traza
-              </button>
-              <button disabled={isThinking} className="exam" onClick={() => runTutorAction("exam")}>
-                Evaluar parcial
-              </button>
-              <button disabled={isThinking} className="quiet" onClick={() => runTutorAction("solution")}>
-                Solucion
-              </button>
-              <button className="quiet" onClick={exportAttempt}>
-                Exportar .pas
-              </button>
-              <button className="quiet" onClick={resetCurrentExercise}>
-                Resetear
-              </button>
-            </div>
+                <div className="action-bar">
+                  <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
+                    Pista
+                  </button>
+                  <button disabled={isThinking} onClick={() => runTutorAction("correct")}>
+                    Corregir
+                  </button>
+                  <button disabled={isThinking} onClick={() => runTutorAction("trace")}>
+                    Traza
+                  </button>
+                  <button disabled={isThinking} className="exam" onClick={() => runTutorAction("exam")}>
+                    Evaluar parcial
+                  </button>
+                  <button disabled={isThinking} className="quiet" onClick={() => runTutorAction("solution")}>
+                    Solucion
+                  </button>
+                  <button className="quiet" onClick={exportAttempt}>
+                    Exportar .pas
+                  </button>
+                  <button className="quiet" onClick={resetCurrentExercise}>
+                    Resetear
+                  </button>
+                </div>
+              </>
+            )}
 
-            {viewMode === "simulacro" && (
+            {topPanelsOpen && viewMode === "simulacro" && (
               <section className="sim-panel">
                 <div>
                   <strong>Modo simulacro</strong>
