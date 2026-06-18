@@ -702,13 +702,6 @@ button {
   background: #b14d36;
 }
 
-.action-bar .complete-button {
-  color: #17211f;
-  background: #58cc02;
-  box-shadow: 0 4px 0 #3c9700;
-  font-weight: 950;
-}
-
 .action-bar .quiet {
   color: #151a18;
   background: rgba(255, 255, 255, 0.78);

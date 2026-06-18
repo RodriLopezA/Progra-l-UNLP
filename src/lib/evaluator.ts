@@ -9,12 +9,37 @@ export type TutorResult = {
 
 const has = (code: string, pattern: RegExp) => pattern.test(code.toLowerCase());
 
+function stripComments(code: string) {
+  return code
+    .replace(/\{[\s\S]*?\}/g, " ")
+    .replace(/\(\*[\s\S]*?\*\)/g, " ")
+    .replace(/\/\/.*$/gm, " ");
+}
+
+function realCodeStats(code: string) {
+  const withoutComments = stripComments(code);
+  const normalized = withoutComments.toLowerCase();
+  const statements = (withoutComments.match(/;/g) ?? []).length;
+  const assignments = (withoutComments.match(/:=/g) ?? []).length;
+  const placeholders = /completar|respuesta\s*[a-z]?\s*:|esqueleto|plan guiado/i.test(code);
+
+  return {
+    withoutComments,
+    normalized,
+    statements,
+    assignments,
+    placeholders,
+    hasRealBody: statements >= 3 || assignments >= 2,
+  };
+}
+
 function inferChecks(exercise: Exercise, code: string): RubricCheck[] {
-  const normalized = code.toLowerCase();
+  const stats = realCodeStats(code);
+  const normalized = stats.normalized;
 
   return exercise.rubric.map((label) => {
     const text = label.toLowerCase();
-    let ok = true;
+    let ok = stats.hasRealBody && !stats.placeholders;
 
     if (text.includes("contador") || text.includes("acumulador")) {
       ok = /:= *0|:= *1/.test(normalized);
@@ -52,7 +77,8 @@ function inferChecks(exercise: Exercise, code: string): RubricCheck[] {
 }
 
 export function evaluateCode(exercise: Exercise, code: string): TutorResult {
-  const normalized = code.toLowerCase();
+  const stats = realCodeStats(code);
+  const normalized = stats.normalized;
   const errors: Omit<ErrorRecord, "id" | "createdAt">[] = [];
   let score = 10;
 
@@ -64,6 +90,22 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
     errors.push({ exerciseId: exercise.id, topic: exercise.topic, kind, text });
     score -= penalty;
   };
+
+  if (stats.withoutComments.trim().length < 40 || !stats.hasRealBody) {
+    addError(
+      "logica",
+      "Todavia no hay un intento suficiente para corregir. Veo muy poco codigo real fuera de comentarios.",
+      6,
+    );
+  }
+
+  if (stats.placeholders) {
+    addError(
+      "logica",
+      "Quedaron partes sin completar o respuestas en blanco. Antes de evaluar, reemplaza los marcadores por tu intento.",
+      3,
+    );
+  }
 
   if (!has(normalized, /\bbegin\b/) || !has(normalized, /\bend\b/)) {
     addError(
@@ -82,6 +124,14 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   }
 
   if (exercise.topic.includes("lista") || exercise.topic === "insertar ordenado") {
+    if (!has(normalized, /\^/)) {
+      addError(
+        "punteros/listas",
+        "El tema es listas/punteros, pero no veo uso real de ^ para acceder a nodos.",
+        2,
+      );
+    }
+
     if (!has(normalized, /<> *nil|= *nil/)) {
       addError(
         "punteros/listas",
@@ -128,6 +178,14 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   }
 
   if (exercise.topic === "suma de digitos") {
+    if (!has(normalized, /\bwhile\b|\brepeat\b/)) {
+      addError(
+        "logica",
+        "Para suma de digitos normalmente hace falta repetir mientras el numero se va achicando.",
+        2,
+      );
+    }
+
     if (!has(normalized, /\bmod\b/) || !has(normalized, /\bdiv\b/)) {
       addError(
         "logica",
@@ -197,14 +255,15 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   const checks = inferChecks(exercise, code);
   const missingChecks = checks.filter((check) => check.status !== "ok").length;
   score -= Math.min(3, missingChecks);
+  score = Math.max(1, Math.min(10, score));
 
-  if (errors.length === 0) {
+  if (errors.length === 0 && missingChecks === 0 && stats.hasRealBody && !stats.placeholders) {
     return {
       errors,
       checks,
-      score: Math.max(1, score),
+      score,
       message:
-        "Viene muy bien. No detecte errores tipicos con las reglas actuales. Ahora proba hacer una traza corta con un caso chico para confirmar la logica.",
+        "Viene muy bien: hay un intento completo, sin marcadores pendientes y no detecte errores tipicos. Ahora proba un caso chico para confirmar la logica.",
     };
   }
 
@@ -212,8 +271,10 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   return {
     errors,
     checks,
-    score: Math.max(1, score),
-    message: `Te marco primero esto: ${first.text} Antes de tocar todo el codigo, proba corregir solo esa parte y volve a evaluar.`,
+    score,
+    message: first
+      ? `Te marco primero esto: ${first.text}\n\nDiagnostico: puntaje estimado ${score}/10. No te lo doy por aprobado todavia; corregi esa parte y volve a evaluar.`
+      : `Todavia hay criterios de rubrica para revisar. Puntaje estimado ${score}/10. Mira los items marcados antes de avanzar.`,
   };
 }
 

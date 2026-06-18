@@ -19,7 +19,11 @@ export function getTutorReply(
 
   if (action === "correct") {
     const result = evaluateCode(exercise, code);
-    return { text: result.message, errors: result.errors };
+    const pending = result.checks.filter((check) => check.status !== "ok").length;
+    return {
+      text: `Analice tu intento como tutor.\n\nPuntaje estimado: ${result.score}/10\nCriterios pendientes: ${pending}\n\n${result.message}`,
+      errors: result.errors,
+    };
   }
 
   if (action === "exam") {

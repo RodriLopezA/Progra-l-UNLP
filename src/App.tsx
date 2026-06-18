@@ -475,6 +475,11 @@ function App() {
           ...current,
           { id: crypto.randomUUID(), role: "tutor", text: geminiText },
         ]);
+
+        if (action === "correct" || action === "exam") {
+          const localResult = evaluateCode(selectedExercise, code);
+          completeLessonIfSolved(localResult.score, localResult.errors.length);
+        }
       } catch (error) {
         const fallback = getTutorReply(action, selectedExercise, code, hintsUsed);
         const savedHistory = saveErrors(fallback.errors);
@@ -494,20 +499,27 @@ function App() {
       return;
     }
 
+    const resultForAction =
+      action === "correct" || action === "exam" ? evaluateCode(selectedExercise, code) : null;
     const reply = getTutorReply(action, selectedExercise, code, hintsUsed);
     if (action === "hint") setHintsUsed((current) => current + 1);
 
     const savedHistory = saveErrors(reply.errors);
     if (savedHistory.length > 0) setHistory(savedHistory);
     if (action === "correct" || action === "exam") {
-      setStudyStats((current) => {
-        const rewarded = awardXp(current, reply.errors.length === 0 ? 5 : 2);
-        const next = {
-          ...rewarded,
-          hearts: reply.errors.length > 0 ? Math.max(0, current.hearts - 1) : current.hearts,
-        };
-        return saveStudyStats(next);
-      });
+      const completed = resultForAction
+        ? completeLessonIfSolved(resultForAction.score, resultForAction.errors.length)
+        : false;
+      if (!completed) {
+        setStudyStats((current) => {
+          const rewarded = awardXp(current, reply.errors.length === 0 ? 5 : 2);
+          const next = {
+            ...rewarded,
+            hearts: reply.errors.length > 0 ? Math.max(0, current.hearts - 1) : current.hearts,
+          };
+          return saveStudyStats(next);
+        });
+      }
     }
     appendTutorMessage(labels[action], reply.text);
   };
@@ -698,26 +710,25 @@ function App() {
     appendTutorMessage("Entregar simulacro", result.message);
   };
 
-  const completeCurrentLesson = () => {
-    const alreadyCompleted = studyStats.completedLessons.includes(selectedExercise.id);
-    const earnedXp = alreadyCompleted ? 5 : selectedExercise.level === "desafio" ? 25 : 15;
+  const completeLessonIfSolved = (resultScore: number, errorCount: number) => {
+    if (resultScore < 8 || errorCount > 0) return false;
+    if (studyStats.completedLessons.includes(selectedExercise.id)) return false;
+
+    const earnedXp = selectedExercise.level === "desafio" ? 25 : 15;
     const rewarded = awardXp(studyStats, earnedXp);
     const nextStats = {
       ...rewarded,
-      gems: studyStats.gems + (alreadyCompleted ? 0 : 2),
-      hearts: Math.min(5, studyStats.hearts + (evaluation.score >= 8 ? 1 : 0)),
-      completedLessons: alreadyCompleted
-        ? studyStats.completedLessons
-        : [...studyStats.completedLessons, selectedExercise.id],
+      gems: studyStats.gems + 2,
+      hearts: Math.min(5, studyStats.hearts + 1),
+      completedLessons: [...studyStats.completedLessons, selectedExercise.id],
     };
 
     setStudyStats(saveStudyStats(nextStats));
     appendTutorMessage(
-      "Completar leccion",
-      alreadyCompleted
-        ? `Repaso completado. Sumaste ${earnedXp} XP extra.`
-        : `Leccion completada. Sumaste ${earnedXp} XP y avanzaste en el camino.`,
+      "Leccion completada",
+      `Ahora si: resolviste bien el ejercicio. Sumaste ${earnedXp} XP, 2 gemas y avanzaste en el camino.`,
     );
+    return true;
   };
 
   const exportAttempt = () => {
@@ -1075,9 +1086,6 @@ function App() {
                 )}
 
                 <div className="action-bar">
-                  <button className="complete-button" onClick={completeCurrentLesson}>
-                    Completar leccion
-                  </button>
                   {!isExtremeStage && (
                     <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
                       Pista
