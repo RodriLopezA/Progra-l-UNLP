@@ -1184,13 +1184,13 @@ button {
     #fffaf0;
 }
 
-.duo-status-card {
+.duo-top-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.duo-status-card div {
+.duo-top-strip div {
   display: grid;
   gap: 5px;
   padding: 13px;
@@ -1200,16 +1200,108 @@ button {
   box-shadow: 0 10px 24px rgba(21, 26, 24, 0.06);
 }
 
-.duo-status-card span {
+.duo-top-strip span {
   color: #66716b;
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.duo-status-card strong {
+.duo-top-strip strong {
   color: #173f36;
   font-size: 20px;
+}
+
+.unit-hero {
+  display: grid;
+  gap: 8px;
+  padding: 22px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(255, 255, 255, 0.22), transparent 30%),
+    linear-gradient(135deg, #58cc02, #1cb0f6);
+  border-radius: 20px;
+  box-shadow: 0 10px 0 #36a600;
+}
+
+.unit-hero span,
+.unit-hero small {
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.unit-hero h3,
+.unit-hero p {
+  margin: 0;
+}
+
+.unit-hero h3 {
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.unit-hero p {
+  max-width: 760px;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.unit-progress,
+.quest-progress {
+  height: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+
+.unit-progress span,
+.quest-progress span {
+  display: block;
+  height: 100%;
+  background: #ffffff;
+  border-radius: inherit;
+}
+
+.daily-quests {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quest {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: #ffffff;
+  border: 2px solid rgba(21, 26, 24, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 7px 0 #d7dfd2;
+}
+
+.quest span {
+  color: #66716b;
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.quest strong {
+  color: #173f36;
+  font-size: 22px;
+}
+
+.quest .quest-progress {
+  background: #e5eadf;
+}
+
+.quest .quest-progress span {
+  background: #58cc02;
+}
+
+.quest.done {
+  border-color: rgba(88, 204, 2, 0.42);
+  background: #f3ffe9;
 }
 
 .mission-card {
@@ -1223,6 +1315,13 @@ button {
     linear-gradient(135deg, rgba(13, 30, 27, 0.98), rgba(31, 92, 72, 0.94)),
     #173f36;
   border-radius: 14px;
+}
+
+.duo-continue-card {
+  background:
+    radial-gradient(circle at 90% 4%, rgba(255, 255, 255, 0.18), transparent 30%),
+    #1f2937;
+  box-shadow: 0 9px 0 #111827;
 }
 
 .mission-card h3,
@@ -1387,6 +1486,21 @@ button {
 .lesson-node.active {
   border-color: #f3be48;
   box-shadow: 0 8px 0 #c88d24;
+}
+
+.lesson-node.locked {
+  cursor: not-allowed;
+  opacity: 0.62;
+  filter: grayscale(0.65);
+}
+
+.lesson-node.locked small {
+  background: #9ca3af;
+}
+
+.lesson-node:disabled:hover {
+  transform: none;
+  box-shadow: 0 8px 0 #d7dfd2;
 }
 
 .mission-row {
@@ -1850,7 +1964,8 @@ button {
 
   .coach-grid,
   .path-lower-grid,
-  .duo-status-card {
+  .duo-top-strip,
+  .daily-quests {
     grid-template-columns: 1fr;
   }
 

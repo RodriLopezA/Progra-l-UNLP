@@ -97,9 +97,26 @@ function updateStreak(stats: StudyStats) {
 
   return {
     ...stats,
+    dailyXp: 0,
     streak: stats.lastStudyDate === yesterdayKey() ? stats.streak + 1 : 1,
     lastStudyDate: today,
   };
+}
+
+function awardXp(stats: StudyStats, amount: number) {
+  const next = updateStreak(stats);
+  return {
+    ...next,
+    xp: next.xp + amount,
+    dailyXp: next.dailyXp + amount,
+  };
+}
+
+function completedInText(progress: number) {
+  if (progress >= 100) return "Unidad completada";
+  if (progress >= 60) return "Muy buen avance";
+  if (progress > 0) return "Progreso iniciado";
+  return "Empeza por la primera leccion";
 }
 
 function buildPlanBlock(exercise: Exercise) {
@@ -294,6 +311,7 @@ function App() {
   ).length;
   const stageProgress =
     stageExercises.length === 0 ? 0 : Math.round((completedInStage / stageExercises.length) * 100);
+  const dailyGoal = 50;
 
   useEffect(() => {
     setCode(loadCode(selectedExercise.id, selectedExercise.starterCode));
@@ -470,11 +488,11 @@ function App() {
     if (savedHistory.length > 0) setHistory(savedHistory);
     if (action === "correct" || action === "exam") {
       setStudyStats((current) => {
-        const next = updateStreak({
-          ...current,
+        const rewarded = awardXp(current, reply.errors.length === 0 ? 5 : 2);
+        const next = {
+          ...rewarded,
           hearts: reply.errors.length > 0 ? Math.max(0, current.hearts - 1) : current.hearts,
-          xp: current.xp + (reply.errors.length === 0 ? 5 : 2),
-        });
+        };
         return saveStudyStats(next);
       });
     }
@@ -649,12 +667,12 @@ function App() {
     setAttempts(nextAttempts);
     if (savedHistory.length > 0) setHistory(savedHistory);
     setStudyStats((current) => {
-      const next = updateStreak({
-        ...current,
-        xp: current.xp + Math.max(5, result.score * 3),
+      const rewarded = awardXp(current, Math.max(5, result.score * 3));
+      const next = {
+        ...rewarded,
         gems: current.gems + (result.score >= 7 ? 3 : 1),
         hearts: result.score < 5 ? Math.max(0, current.hearts - 1) : current.hearts,
-      });
+      };
       return saveStudyStats(next);
     });
     setSimRunning(false);
@@ -664,15 +682,15 @@ function App() {
   const completeCurrentLesson = () => {
     const alreadyCompleted = studyStats.completedLessons.includes(selectedExercise.id);
     const earnedXp = alreadyCompleted ? 5 : selectedExercise.level === "desafio" ? 25 : 15;
-    const nextStats = updateStreak({
-      ...studyStats,
-      xp: studyStats.xp + earnedXp,
+    const rewarded = awardXp(studyStats, earnedXp);
+    const nextStats = {
+      ...rewarded,
       gems: studyStats.gems + (alreadyCompleted ? 0 : 2),
       hearts: Math.min(5, studyStats.hearts + (evaluation.score >= 8 ? 1 : 0)),
       completedLessons: alreadyCompleted
         ? studyStats.completedLessons
         : [...studyStats.completedLessons, selectedExercise.id],
-    });
+    };
 
     setStudyStats(saveStudyStats(nextStats));
     appendTutorMessage(
@@ -804,6 +822,10 @@ function App() {
           <div className="metric duo-metric">
             <span>XP</span>
             <strong>{studyStats.xp}</strong>
+          </div>
+          <div className="metric duo-metric">
+            <span>Hoy</span>
+            <strong>{Math.min(studyStats.dailyXp, dailyGoal)}</strong>
           </div>
           <div className="metric duo-metric">
             <span>Racha</span>
@@ -993,6 +1015,7 @@ function App() {
             attempts={attempts}
             studyStats={studyStats}
             stageProgress={stageProgress}
+            dailyGoal={dailyGoal}
             onOpenExercise={openExerciseFromPath}
           />
         ) : viewMode === "progreso" ? (
@@ -1450,6 +1473,7 @@ function PathPanel({
   attempts,
   studyStats,
   stageProgress,
+  dailyGoal,
   onOpenExercise,
 }: {
   stages: LearningStage[];
@@ -1465,12 +1489,19 @@ function PathPanel({
   attempts: ExamAttempt[];
   studyStats: StudyStats;
   stageProgress: number;
+  dailyGoal: number;
   onOpenExercise: (exerciseId: string, reason: string) => void;
 }) {
   const currentIndex = stageExercises.findIndex((exercise) => exercise.id === currentExercise.id);
+  const firstIncompleteIndex = stageExercises.findIndex(
+    (exercise) => !studyStats.completedLessons.includes(exercise.id),
+  );
+  const nextLesson = firstIncompleteIndex >= 0 ? stageExercises[firstIncompleteIndex] : stageExercises[0];
+  const nextUnlockedIndex = firstIncompleteIndex === -1 ? stageExercises.length : firstIncompleteIndex + 1;
   const nextInStage = currentIndex >= 0 ? stageExercises[currentIndex + 1] : stageExercises[0];
   const bridge = bridgeExercises[0] ?? stageExercises[0];
   const examGoal = examExercises[0] ?? stageExercises[stageExercises.length - 1];
+  const dailyPercent = Math.min(100, Math.round((studyStats.dailyXp / dailyGoal) * 100));
   const weakTopics = history
     .filter((item) => selectedStage.topics.includes(item.topic))
     .slice(0, 3);
@@ -1491,10 +1522,10 @@ function PathPanel({
             action: "Hacer ejercicio puente",
           }
         : {
-            title: "Mision recomendada",
-            text: "Este ejercicio esta en una dificultad razonable para avanzar sin quemarte ni copiar soluciones.",
-            exercise: nextInStage ?? stageExercises[0],
-            action: "Practicar ahora",
+            title: "Segui tu camino",
+            text: "Una leccion corta, correccion amable y avance visible. La idea es sumar constancia, no sufrir el parcial de golpe.",
+            exercise: nextLesson ?? nextInStage ?? stageExercises[0],
+            action: "Continuar",
           };
 
   return (
@@ -1517,10 +1548,10 @@ function PathPanel({
       </aside>
 
       <div className="path-main">
-        <section className="duo-status-card">
+        <section className="duo-top-strip">
           <div>
             <span>Racha</span>
-            <strong>{studyStats.streak} dias</strong>
+            <strong>{studyStats.streak}</strong>
           </div>
           <div>
             <span>Vidas</span>
@@ -1531,14 +1562,42 @@ function PathPanel({
             <strong>{studyStats.gems}</strong>
           </div>
           <div>
-            <span>Unidad</span>
-            <strong>{stageProgress}%</strong>
+            <span>Meta diaria</span>
+            <strong>{Math.min(studyStats.dailyXp, dailyGoal)}/{dailyGoal} XP</strong>
           </div>
         </section>
 
-        <section className="mission-card">
+        <section className="unit-hero">
+          <span>Unidad {selectedStage.level}</span>
+          <h3>{selectedStage.title}</h3>
+          <p>{selectedStage.subtitle}</p>
+          <div className="unit-progress">
+            <span style={{ width: `${stageProgress}%` }} />
+          </div>
+          <small>{completedInText(stageProgress)} de esta unidad</small>
+        </section>
+
+        <section className="daily-quests">
+          <article className={studyStats.dailyXp >= dailyGoal ? "quest done" : "quest"}>
+            <span>Meta diaria</span>
+            <strong>{dailyPercent}%</strong>
+            <div className="quest-progress">
+              <span style={{ width: `${dailyPercent}%` }} />
+            </div>
+          </article>
+          <article className={studyStats.completedLessons.length > 0 ? "quest done" : "quest"}>
+            <span>Completa una leccion</span>
+            <strong>{studyStats.completedLessons.length > 0 ? "OK" : "0/1"}</strong>
+          </article>
+          <article className={score >= 7 ? "quest done" : "quest"}>
+            <span>Sin miedo al error</span>
+            <strong>{score >= 7 ? "OK" : `${score}/7`}</strong>
+          </article>
+        </section>
+
+        <section className="mission-card duo-continue-card">
           <div>
-            <span className="eyebrow">Tutor inteligente</span>
+            <span className="eyebrow">Siguiente leccion</span>
             <h3>{mission.title}</h3>
             <p>{mission.text}</p>
           </div>
@@ -1576,24 +1635,27 @@ function PathPanel({
 
         <section className="path-section">
           <div className="section-title">
-            <span>Lecciones de la unidad</span>
-            <small>Toca un circulo para practicar</small>
+            <span>Camino de lecciones</span>
+            <small>Completa para desbloquear el siguiente paso</small>
           </div>
           <div className="duo-lesson-path">
             {stageExercises.map((exercise, index) => {
               const completed = studyStats.completedLessons.includes(exercise.id);
               const current = exercise.id === currentExercise.id;
+              const locked = index > nextUnlockedIndex;
               return (
               <button
                 className={[
                   "lesson-node",
                   completed ? "completed" : "",
                   current ? "active" : "",
+                  locked ? "locked" : "",
                   index % 2 === 0 ? "left" : "right",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 key={exercise.id}
+                disabled={locked}
                 onClick={() =>
                   onOpenExercise(
                     exercise.id,
@@ -1601,7 +1663,7 @@ function PathPanel({
                   )
                 }
               >
-                <small>{completed ? "OK" : index + 1}</small>
+                <small>{locked ? "..." : completed ? "OK" : index + 1}</small>
                 <span>{exercise.title}</span>
                 <em>{exercise.level}</em>
               </button>

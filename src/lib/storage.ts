@@ -2,6 +2,7 @@ import type { ErrorRecord, ExamAttempt } from "../types";
 
 export type StudyStats = {
   xp: number;
+  dailyXp: number;
   streak: number;
   hearts: number;
   gems: number;
@@ -17,6 +18,7 @@ const statsKey = "p1unlp:study-stats";
 
 const defaultStats: StudyStats = {
   xp: 0,
+  dailyXp: 0,
   streak: 0,
   hearts: 5,
   gems: 0,
