@@ -8,6 +8,12 @@ import { practices, type PracticeGuide } from "./data/practices";
 import { buildExamFeedback, evaluateCode } from "./lib/evaluator";
 import { askGeminiFreeQuestion, askGeminiTutor, testGeminiKey } from "./lib/gemini";
 import {
+  buildCompilerTutorNote,
+  compilePascal,
+  defaultCompilerEndpoint,
+  type PascalCompileResult,
+} from "./lib/pascalCompiler";
+import {
   exportTextFile,
   clearGeminiKey,
   clearStudyData,
@@ -261,6 +267,11 @@ function App() {
   const [hintsLocked, setHintsLocked] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState((selectedExercise.minutes ?? 20) * 60);
   const [geminiStatus, setGeminiStatus] = useState<"idle" | "ok" | "error">("idle");
+  const [compilerEndpoint, setCompilerEndpoint] = useState(
+    () => localStorage.getItem("p1unlp:compiler-endpoint") ?? defaultCompilerEndpoint,
+  );
+  const [compilerResult, setCompilerResult] = useState<PascalCompileResult | null>(null);
+  const [isCompiling, setIsCompiling] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => localStorage.getItem("p1unlp:onboarded") !== "yes",
   );
@@ -342,6 +353,10 @@ function App() {
   }, [geminiKey]);
 
   useEffect(() => {
+    localStorage.setItem("p1unlp:compiler-endpoint", compilerEndpoint);
+  }, [compilerEndpoint]);
+
+  useEffect(() => {
     if (!simRunning) return;
     const timer = window.setInterval(() => {
       setSecondsLeft((current) => {
@@ -418,6 +433,46 @@ function App() {
         "Probar Gemini",
         error instanceof Error ? error.message : "No pude probar Gemini.",
       );
+    }
+  };
+
+  const runCompiler = async () => {
+    setIsCompiling(true);
+    setVisiblePanels((current) => ({ ...current, compiler: true }));
+
+    try {
+      const result = await compilePascal(compilerEndpoint.trim() || defaultCompilerEndpoint, code);
+      setCompilerResult(result);
+      appendTutorMessage("Compilar con Free Pascal", buildCompilerTutorNote(result));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No pude conectar con el compilador Pascal.";
+      const result: PascalCompileResult = {
+        ok: false,
+        status: "server-error",
+        output: message,
+        errors: [message],
+        warnings: [],
+        hints: [
+          "Ejecuta `npm run compiler` en otra terminal.",
+          "Instala Free Pascal si el comando fpc no existe.",
+        ],
+      };
+      setCompilerResult(result);
+      appendTutorMessage(
+        "Compilar con Free Pascal",
+        `${message}
+
+Para activarlo:
+1. Instala Free Pascal.
+2. Abri otra terminal en el proyecto.
+3. Ejecuta npm run compiler.
+4. Volve a tocar Compilar Pascal.`,
+      );
+    } finally {
+      setIsCompiling(false);
     }
   };
 
@@ -1083,6 +1138,9 @@ function App() {
                 )}
 
                 <div className="action-bar">
+                  <button disabled={isCompiling} onClick={runCompiler}>
+                    {isCompiling ? "Compilando..." : "Compilar Pascal"}
+                  </button>
                   {!isExtremeStage && (
                     <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
                       Pista
@@ -1201,7 +1259,15 @@ function App() {
                 {visiblePanels.trace && (
                   <TracePanel exerciseTitle={selectedExercise.title} traceVersion={traceVersion} />
                 )}
-                {visiblePanels.compiler && <CompilerPanel />}
+                {visiblePanels.compiler && (
+                  <CompilerPanel
+                    endpoint={compilerEndpoint}
+                    setEndpoint={setCompilerEndpoint}
+                    result={compilerResult}
+                    isCompiling={isCompiling}
+                    onCompile={runCompiler}
+                  />
+                )}
                 {visiblePanels.data && <MaintenancePanel onClearAll={clearAllProgress} />}
               </aside>
             </div>
@@ -1370,15 +1436,58 @@ function MaintenancePanel({ onClearAll }: { onClearAll: () => void }) {
   );
 }
 
-function CompilerPanel() {
+function CompilerPanel({
+  endpoint,
+  setEndpoint,
+  result,
+  isCompiling,
+  onCompile,
+}: {
+  endpoint: string;
+  setEndpoint: (value: string) => void;
+  result: PascalCompileResult | null;
+  isCompiling: boolean;
+  onCompile: () => void;
+}) {
   return (
-    <PanelShell title="Compilador" meta="futuro">
+    <PanelShell title="Compilador" meta={result?.ok ? "compila" : "Free Pascal"}>
       <div className="compiler-card">
-        <strong>Free Pascal todavia no esta conectado.</strong>
+        <strong>Free Pascal real, sin IA paga.</strong>
         <p>
-          La pagina ya esta preparada para estudiar y corregir por reglas. La ejecucion real
-          necesita un backend para correr fpc de forma segura.
+          Para compilar de verdad, ejecuta `npm run compiler` en otra terminal. La pagina
+          manda tu codigo a ese servidor local y el tutor interpreta la salida.
         </p>
+        <label className="key-field">
+          <span>Endpoint del compilador</span>
+          <input
+            value={endpoint}
+            onChange={(event) => setEndpoint(event.target.value)}
+            placeholder={defaultCompilerEndpoint}
+          />
+        </label>
+        <button disabled={isCompiling} onClick={onCompile}>
+          {isCompiling ? "Compilando..." : "Compilar ahora"}
+        </button>
+        {result && (
+          <div className={`compiler-result ${result.ok ? "ok" : "error"}`}>
+            <strong>{result.ok ? "Compilacion correcta" : "Compilacion con errores"}</strong>
+            {typeof result.elapsedMs === "number" && <span>{result.elapsedMs} ms</span>}
+            {result.errors.length > 0 && (
+              <>
+                <small>Errores</small>
+                <pre>{result.errors.join("\n")}</pre>
+              </>
+            )}
+            {result.warnings.length > 0 && (
+              <>
+                <small>Warnings</small>
+                <pre>{result.warnings.join("\n")}</pre>
+              </>
+            )}
+            <small>Salida completa</small>
+            <pre>{result.output || "Sin salida del compilador."}</pre>
+          </div>
+        )}
       </div>
     </PanelShell>
   );

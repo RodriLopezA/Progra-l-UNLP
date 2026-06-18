@@ -40,6 +40,44 @@ Abrir la URL que aparezca, normalmente:
 http://localhost:5173
 ```
 
+## Compilador Pascal gratis
+
+La pagina puede conectarse a Free Pascal si lo tenes instalado en tu PC. Esto mejora mucho al tutor porque permite separar errores reales de compilacion de errores de logica.
+
+1. Instala Free Pascal desde:
+
+```text
+https://www.freepascal.org/download.html
+```
+
+2. Verifica en PowerShell:
+
+```powershell
+fpc -h
+```
+
+3. En una terminal, levanta la pagina:
+
+```powershell
+npm run dev
+```
+
+4. En otra terminal, levanta el compilador local:
+
+```powershell
+npm run compiler
+```
+
+5. En la pagina, activa el panel `Compilador` y usa `Compilar Pascal`.
+
+Por defecto el frontend llama a:
+
+```text
+http://localhost:8787/compile
+```
+
+Nota importante: Vercel no puede ejecutar `fpc` dentro de una pagina estatica. Para tener compilacion real online, hay que subir este compilador como backend aparte en Render, Railway, Fly.io o un VPS. La pagina queda preparada para cambiar el endpoint.
+
 ## Modo IA gratis con Gemini
 
 La pagina puede funcionar sin IA usando reglas locales. Si queres IA, cada usuario puede pegar su propia API key de Gemini en la configuracion del tutor.
