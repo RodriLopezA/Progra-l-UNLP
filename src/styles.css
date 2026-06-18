@@ -489,6 +489,36 @@ button {
   font-weight: 850;
 }
 
+.automation-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 240, 0.9), rgba(226, 239, 224, 0.86)),
+    #f8faf5;
+  border: 1px solid rgba(21, 26, 24, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(21, 26, 24, 0.08);
+}
+
+.automation-bar button {
+  min-height: 38px;
+  padding: 0 12px;
+  color: #17211f;
+  background: #ffffff;
+  border: 1px solid rgba(21, 26, 24, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.automation-bar .auto-primary {
+  color: #f8faf5;
+  background: linear-gradient(135deg, #173f36, #2d7b61);
+  border-color: transparent;
+}
+
 .back-button {
   min-height: 36px;
   padding: 0 12px;
@@ -1614,7 +1644,8 @@ button {
   .topbar,
   .brief,
   .sim-panel,
-  .tool-toggle-bar {
+  .tool-toggle-bar,
+  .automation-bar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1627,6 +1658,7 @@ button {
   }
 
   .tool-toggle,
+  .automation-bar button,
   .back-button {
     justify-content: center;
     width: 100%;

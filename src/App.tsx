@@ -78,6 +78,107 @@ function formatTimer(seconds: number) {
   return `${minutes}:${rest}`;
 }
 
+function buildPlanBlock(exercise: Exercise) {
+  return `{ PLAN GUIADO - ${exercise.title}
+Entrada:
+- Que datos recibo o leo?
+
+Proceso:
+- Que recorrido necesito?
+- Que variable cambia en cada vuelta?
+
+Salida:
+- Que tengo que informar, devolver o modificar?
+
+Modulos:
+- Que procedure/function chico puedo separar?
+
+Caso de prueba mini:
+- Probar con 2 o 3 datos antes de seguir.
+}
+
+`;
+}
+
+function buildScaffold(exercise: Exercise) {
+  if (exercise.topic.includes("lista")) {
+    return `{ ESQUELETO DE LISTA
+- Inicializar acumuladores si hacen falta.
+- Recorrer mientras el puntero sea distinto de nil.
+- Mirar el dato actual con puntero^.dato.
+- Actualizar el resultado.
+- Avanzar siempre con puntero := puntero^.sig.
+- Devolver, informar o modificar lo pedido.
+}`;
+  }
+
+  if (exercise.topic === "vectores") {
+    return `{ ESQUELETO DE VECTOR
+- Identificar dimF y dimL.
+- Inicializar acumulador, maximo o minimo.
+- Recorrer solo las posiciones validas.
+- Procesar v[i].
+- Devolver o informar el resultado.
+}`;
+  }
+
+  if (exercise.topic === "matrices/tablas") {
+    return `{ ESQUELETO DE MATRIZ/TABLA
+- Definir que representa cada indice.
+- Recorrer filas y columnas.
+- Reiniciar acumuladores por fila/grupo cuando corresponda.
+- Consultar tabla[codigo1, codigo2] si la consigna lo pide.
+- No invertir fila y columna.
+}`;
+  }
+
+  if (exercise.topic === "suma de digitos") {
+    return `{ ESQUELETO DE SUMA DE DIGITOS
+- Inicializar suma en 0.
+- Repetir mientras el numero no sea 0.
+- Obtener ultimo digito con mod 10.
+- Achicar el numero con div 10.
+- Devolver la suma.
+}`;
+  }
+
+  return `{ esqueleto general }
+{ 1. Inicializar variables }
+{ 2. Leer o recorrer datos }
+{ 3. Actualizar contadores/acumuladores/maximos }
+{ 4. Informar o devolver el resultado }`;
+}
+
+function buildTraceRows(exercise: Exercise) {
+  if (exercise.topic.includes("lista")) {
+    return [
+      { dato: "primer nodo", acum: "inicial", puntero: "l -> primero" },
+      { dato: "segundo nodo", acum: "actualizar", puntero: "l := l^.sig" },
+      { dato: "nil", acum: "resultado", puntero: "fin" },
+      { dato: "", acum: "", puntero: "" },
+      { dato: "", acum: "", puntero: "" },
+    ];
+  }
+
+  if (exercise.topic === "matrices/tablas") {
+    return [
+      { dato: "i=1 j=1", acum: "fila 1", puntero: "m[1,1]" },
+      { dato: "i=1 j=2", acum: "actualizar", puntero: "m[1,2]" },
+      { dato: "i=2 j=1", acum: "reiniciar?", puntero: "m[2,1]" },
+      { dato: "", acum: "", puntero: "" },
+      { dato: "", acum: "", puntero: "" },
+    ];
+  }
+
+  return [
+    { dato: "dato 1", acum: "inicial", puntero: "vuelta 1" },
+    { dato: "dato 2", acum: "actualizar", puntero: "vuelta 2" },
+    { dato: "corte", acum: "resultado", puntero: "fin" },
+    { dato: "", acum: "", puntero: "" },
+    { dato: "", acum: "", puntero: "" },
+  ];
+}
+
 function App() {
   const [selectedId, setSelectedId] = useState(exercises[0].id);
   const selectedExercise = useMemo(
@@ -95,6 +196,7 @@ function App() {
     compiler: false,
     data: false,
   });
+  const [traceVersion, setTraceVersion] = useState(0);
   const [search, setSearch] = useState("");
   const [topicFilter, setTopicFilter] = useState("todos");
   const [examFilter, setExamFilter] = useState("todos");
@@ -382,6 +484,102 @@ function App() {
   const goBackToReturnView = () => {
     setViewMode(returnView ?? "camino");
     setReturnView(null);
+  };
+
+  const insertPlanInCode = () => {
+    if (code.includes("PLAN GUIADO")) {
+      appendTutorMessage("Armar plan", "Ya tenes un plan guiado en el codigo. Completa esos puntos antes de agregar mas.");
+      return;
+    }
+
+    setCode(`${buildPlanBlock(selectedExercise)}${code}`);
+    appendTutorMessage(
+      "Armar plan",
+      "Te agregue un plan arriba del codigo. Completa entrada, proceso, salida y un caso mini antes de programar.",
+    );
+  };
+
+  const insertSmartScaffold = () => {
+    const scaffold = buildScaffold(selectedExercise);
+    const nextCode = code.includes("{ completar }")
+      ? code.replace("{ completar }", scaffold)
+      : `${code}\n\n${scaffold}`;
+
+    setCode(nextCode);
+    appendTutorMessage(
+      "Insertar esqueleto",
+      "Te deje un esqueleto en comentarios segun el tema. No es la solucion: es una guia para que completes el modulo.",
+    );
+  };
+
+  const prepareAutomaticTrace = () => {
+    const rows = buildTraceRows(selectedExercise);
+    saveTrace(selectedExercise.id, rows);
+    setTraceVersion((current) => current + 1);
+    setVisiblePanels((current) => ({ ...current, trace: true }));
+    appendTutorMessage(
+      "Preparar traza",
+      "Te arme una traza inicial. Cambia los valores por un caso chico real y revisa vuelta por vuelta.",
+    );
+  };
+
+  const openNextRecommended = () => {
+    const currentIndex = stageExercises.findIndex((exercise) => exercise.id === selectedExercise.id);
+    const nextExercise =
+      currentIndex >= 0 ? stageExercises[currentIndex + 1] ?? stageExamExercises[0] : stageExercises[0];
+    const fallback = stageExamExercises[0] ?? bridgeExercises[0];
+    const target = nextExercise ?? fallback;
+
+    if (!target) {
+      appendTutorMessage("Siguiente recomendado", "No encontre otra mision en este nivel. Proba cambiar de nivel en Camino.");
+      return;
+    }
+
+    openExerciseFromPath(
+      target.id,
+      "Te llevo al siguiente recomendado automaticamente para mantener el ritmo de estudio.",
+    );
+  };
+
+  const runAutoPilot = async () => {
+    if (viewMode !== "estudio") {
+      const target = stageExercises[0] ?? bridgeExercises[0] ?? stageExamExercises[0];
+      if (target) {
+        openExerciseFromPath(
+          target.id,
+          "Arranco el modo automatico desde el primer ejercicio razonable de este nivel.",
+        );
+      }
+      return;
+    }
+
+    setVisiblePanels((current) => ({ ...current, rubric: true }));
+
+    if (evaluation.score < 5) {
+      const scaffold = buildScaffold(selectedExercise);
+      const baseCode = code.includes("PLAN GUIADO")
+        ? code
+        : `${buildPlanBlock(selectedExercise)}${code}`;
+      const nextCode = baseCode.includes("{ completar }")
+        ? baseCode.replace("{ completar }", scaffold)
+        : `${baseCode}\n\n${scaffold}`;
+
+      setCode(nextCode);
+      prepareAutomaticTrace();
+      await runTutorAction("hint");
+      return;
+    }
+
+    if (!code.includes("PLAN GUIADO")) {
+      setCode(`${buildPlanBlock(selectedExercise)}${code}`);
+    }
+
+    if (evaluation.score < 8) {
+      await runTutorAction("correct");
+      return;
+    }
+
+    openNextRecommended();
   };
 
   const finishSimulacro = () => {
@@ -681,6 +879,13 @@ function App() {
         ) : (
           <>
             <ToolPanelToggles visiblePanels={visiblePanels} onToggle={togglePanel} />
+            <AutomationBar
+              onAutoPilot={runAutoPilot}
+              onPlan={insertPlanInCode}
+              onScaffold={insertSmartScaffold}
+              onTrace={prepareAutomaticTrace}
+              onNext={openNextRecommended}
+            />
 
             <div className="action-bar">
               <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
@@ -788,7 +993,9 @@ function App() {
                 {visiblePanels.rubric && (
                   <RubricPanel checks={evaluation.checks} score={evaluation.score} />
                 )}
-                {visiblePanels.trace && <TracePanel exerciseTitle={selectedExercise.title} />}
+                {visiblePanels.trace && (
+                  <TracePanel exerciseTitle={selectedExercise.title} traceVersion={traceVersion} />
+                )}
                 {visiblePanels.compiler && <CompilerPanel />}
                 {visiblePanels.data && <MaintenancePanel onClearAll={clearAllProgress} />}
               </aside>
@@ -871,7 +1078,13 @@ function RubricPanel({ checks, score }: { checks: RubricCheck[]; score: number }
   );
 }
 
-function TracePanel({ exerciseTitle }: { exerciseTitle: string }) {
+function TracePanel({
+  exerciseTitle,
+  traceVersion,
+}: {
+  exerciseTitle: string;
+  traceVersion: number;
+}) {
   const exercise = exercises.find((item) => item.title === exerciseTitle);
   const exerciseId = exercise?.id ?? exerciseTitle;
   const [rows, setRows] = useState(() =>
@@ -883,7 +1096,7 @@ function TracePanel({ exerciseTitle }: { exerciseTitle: string }) {
       loadTrace(exerciseId) ??
         Array.from({ length: 5 }, () => ({ dato: "", acum: "", puntero: "" })),
     );
-  }, [exerciseId]);
+  }, [exerciseId, traceVersion]);
 
   useEffect(() => {
     saveTrace(exerciseId, rows);
@@ -1050,6 +1263,32 @@ function ToolPanelToggles({
           </label>
         ))}
       </div>
+    </section>
+  );
+}
+
+function AutomationBar({
+  onAutoPilot,
+  onPlan,
+  onScaffold,
+  onTrace,
+  onNext,
+}: {
+  onAutoPilot: () => void;
+  onPlan: () => void;
+  onScaffold: () => void;
+  onTrace: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <section className="automation-bar" aria-label="Automatizaciones de estudio">
+      <button className="auto-primary" onClick={onAutoPilot}>
+        Piloto automatico
+      </button>
+      <button onClick={onPlan}>Armar plan</button>
+      <button onClick={onScaffold}>Insertar esqueleto</button>
+      <button onClick={onTrace}>Preparar traza</button>
+      <button onClick={onNext}>Siguiente recomendado</button>
     </section>
   );
 }
