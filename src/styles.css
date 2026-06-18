@@ -618,6 +618,50 @@ button {
   border-color: transparent;
 }
 
+.extreme-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  color: #fff7ed;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 255, 255, 0.18), transparent 28%),
+    linear-gradient(135deg, #1f2937, #991b1b);
+  border-radius: 12px;
+  box-shadow: 0 10px 0 #450a0a;
+}
+
+.extreme-bar div {
+  display: grid;
+  gap: 4px;
+}
+
+.extreme-bar span {
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.extreme-bar strong {
+  font-size: 15px;
+}
+
+.extreme-bar button {
+  min-height: 40px;
+  padding: 0 13px;
+  color: #17211f;
+  background: #facc15;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 950;
+}
+
+.extreme-bar .danger {
+  color: #fff7ed;
+  background: #dc2626;
+}
+
 .back-button {
   min-height: 36px;
   padding: 0 12px;
@@ -2003,6 +2047,7 @@ button {
   .sim-panel,
   .tool-toggle-bar,
   .automation-bar,
+  .extreme-bar,
   .focus-controls {
     align-items: stretch;
     flex-direction: column;
@@ -2017,6 +2062,7 @@ button {
 
   .tool-toggle,
   .automation-bar button,
+  .extreme-bar button,
   .focus-controls button,
   .back-button {
     justify-content: center;

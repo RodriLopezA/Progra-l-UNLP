@@ -137,4 +137,36 @@ export const learningPath: LearningStage[] = [
       "Entrego con liberacion de memoria y casos borde pensados.",
     ],
   },
+  {
+    id: "extremo",
+    level: 6,
+    title: "Modo extremo: parcial sin red",
+    subtitle: "Solo parciales actuales, tiempo real, sin esqueletos ni solucion.",
+    topics: ["recorridos una sola vez", "matrices/tablas", "listas doblemente enlazadas"],
+    goal: "Simular el parcial actual de 2 ejercicios como si estuvieras sentado rindiendo.",
+    tutorPromise:
+      "En este nivel no te doy codigo ni esqueletos. Solo cronometro, consigna, entrega final y rubrica.",
+    exercises: [
+      "parcial-twitch-streaming",
+      "parcial-twitch-lista-doble-completar",
+      "parcial-afa-fichajes",
+      "parcial-afa-lista-doble-inicio",
+      "parcial-figuritas-mundial",
+      "parcial-figuritas-lista-doble-final",
+    ],
+    bridgeExercises: [],
+    examExercises: [
+      "parcial-twitch-streaming",
+      "parcial-twitch-lista-doble-completar",
+      "parcial-afa-fichajes",
+      "parcial-afa-lista-doble-inicio",
+      "parcial-figuritas-mundial",
+      "parcial-figuritas-lista-doble-final",
+    ],
+    checkpoints: [
+      "Leo toda la consigna antes de escribir.",
+      "Armo tipos y modulos sin mirar ayudas.",
+      "Respeto tiempo, recorrido unico y liberacion de memoria.",
+    ],
+  },
 ];

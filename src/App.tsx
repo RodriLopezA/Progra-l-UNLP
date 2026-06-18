@@ -297,6 +297,9 @@ function App() {
     practices.find((practice) => practice.id === selectedPracticeId) ?? practices[0];
   const selectedStage =
     learningPath.find((stage) => stage.id === selectedStageId) ?? learningPath[0];
+  const isExtremeStage = selectedStage.id === "extremo";
+  const codeStorageId = isExtremeStage ? `${selectedExercise.id}:extremo` : selectedExercise.id;
+  const starterForMode = isExtremeStage ? "" : selectedExercise.starterCode;
   const stageExercises = selectedStage.exercises
     .map((id) => exercises.find((exercise) => exercise.id === id))
     .filter((exercise): exercise is Exercise => Boolean(exercise));
@@ -314,23 +317,25 @@ function App() {
   const dailyGoal = 50;
 
   useEffect(() => {
-    setCode(loadCode(selectedExercise.id, selectedExercise.starterCode));
+    setCode(loadCode(codeStorageId, starterForMode));
     setHintsUsed(0);
-    setSecondsLeft((selectedExercise.minutes ?? 20) * 60);
-    setSimRunning(false);
+    setSecondsLeft((isExtremeStage ? 90 : selectedExercise.minutes ?? 20) * 60);
+    setSimRunning(isExtremeStage);
     setMessages([
       initialMessage,
       {
         id: crypto.randomUUID(),
         role: "tutor",
-        text: `Nuevo ejercicio: ${selectedExercise.title}. Primero intenta ubicar datos de entrada, recorrido y resultado esperado.`,
+        text: isExtremeStage
+          ? `Modo extremo: ${selectedExercise.title}. No hay esqueleto ni solucion. Lee, organiza y resolvelo como parcial real.`
+          : `Nuevo ejercicio: ${selectedExercise.title}. Primero intenta ubicar datos de entrada, recorrido y resultado esperado.`,
       },
     ]);
-  }, [selectedExercise]);
+  }, [selectedExercise, codeStorageId, starterForMode, isExtremeStage]);
 
   useEffect(() => {
-    saveCode(selectedExercise.id, code);
-  }, [code, selectedExercise.id]);
+    saveCode(codeStorageId, code);
+  }, [code, codeStorageId]);
 
   useEffect(() => {
     localStorage.setItem("p1unlp:gemini-key", geminiKey);
@@ -433,6 +438,14 @@ function App() {
       return;
     }
 
+    if (isExtremeStage && (action === "hint" || action === "trace" || action === "solution")) {
+      appendTutorMessage(
+        labels[action],
+        "Nivel 6 extremo: esta ayuda queda bloqueada. Aca practicamos como parcial real, sin codigo ni pistas.",
+      );
+      return;
+    }
+
     if (tutorMode === "gemini" && !geminiKey.trim()) {
       appendTutorMessage(
         labels[action],
@@ -503,10 +516,11 @@ function App() {
     setViewMode("simulacro");
     setHintsLocked(true);
     setSimRunning(true);
-    setSecondsLeft((selectedExercise.minutes ?? 20) * 60);
+    const minutes = isExtremeStage ? 90 : selectedExercise.minutes ?? 20;
+    setSecondsLeft(minutes * 60);
     appendTutorMessage(
       "Iniciar simulacro",
-      `Simulacro iniciado: ${selectedExercise.exam}. Tiempo sugerido: ${selectedExercise.minutes ?? 20} minutos.`,
+      `Simulacro iniciado: ${selectedExercise.exam}. Tiempo sugerido: ${minutes} minutos.`,
     );
   };
 
@@ -527,6 +541,11 @@ function App() {
     setExamFilter("todos");
     setExamKindFilter("todos");
     if (viewMode !== "estudio") setReturnView(viewMode);
+    if (isExtremeStage) {
+      setHintsLocked(true);
+      setSecondsLeft(90 * 60);
+      setSimRunning(true);
+    }
     setViewMode("estudio");
     appendTutorMessage(
       "Camino Tutor",
@@ -703,15 +722,18 @@ function App() {
 
   const exportAttempt = () => {
     exportTextFile(
-      `${selectedExercise.id}.pas`,
+      `${isExtremeStage ? "extremo-" : ""}${selectedExercise.id}.pas`,
       `${code}\n\n{ Reporte Tutor Pascal UNLP\nEjercicio: ${selectedExercise.title}\nPuntaje estimado: ${evaluation.score}/10\nPistas usadas: ${hintsUsed}\n}`,
     );
   };
 
   const resetCurrentExercise = () => {
-    resetCode(selectedExercise.id);
-    setCode(selectedExercise.starterCode);
-    appendTutorMessage("Resetear ejercicio", "Volvi el codigo al esqueleto inicial.");
+    resetCode(codeStorageId);
+    setCode(starterForMode);
+    appendTutorMessage(
+      "Resetear ejercicio",
+      isExtremeStage ? "Deje el intento extremo en blanco." : "Volvi el codigo al esqueleto inicial.",
+    );
   };
 
   const clearAllProgress = () => {
@@ -719,7 +741,7 @@ function App() {
     setHistory([]);
     setAttempts([]);
     setStudyStats(loadStudyStats());
-    setCode(selectedExercise.starterCode);
+    setCode(starterForMode);
     appendTutorMessage("Borrar progreso", "Borre intentos, errores, trazas y codigo guardado.");
   };
 
@@ -977,7 +999,7 @@ function App() {
               <div className="brief-tags">
                 {viewMode === "camino" ? (
                   <>
-                    <span>Nivel {selectedStage.level}/5</span>
+                    <span>Nivel {selectedStage.level}/6</span>
                     <span>{stageExercises.length} misiones</span>
                     <span>{stageExamExercises.length} parciales meta</span>
                   </>
@@ -1040,33 +1062,45 @@ function App() {
             {topPanelsOpen && (
               <>
                 <ToolPanelToggles visiblePanels={visiblePanels} onToggle={togglePanel} />
-                <AutomationBar
-                  onAutoPilot={runAutoPilot}
-                  onPlan={insertPlanInCode}
-                  onScaffold={insertSmartScaffold}
-                  onTrace={prepareAutomaticTrace}
-                  onNext={openNextRecommended}
-                />
+                {isExtremeStage ? (
+                  <ExtremeModeBar onStart={startSimulacro} onSubmit={finishFullExam} />
+                ) : (
+                  <AutomationBar
+                    onAutoPilot={runAutoPilot}
+                    onPlan={insertPlanInCode}
+                    onScaffold={insertSmartScaffold}
+                    onTrace={prepareAutomaticTrace}
+                    onNext={openNextRecommended}
+                  />
+                )}
 
                 <div className="action-bar">
                   <button className="complete-button" onClick={completeCurrentLesson}>
                     Completar leccion
                   </button>
-                  <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
-                    Pista
-                  </button>
-                  <button disabled={isThinking} onClick={() => runTutorAction("correct")}>
-                    Corregir
-                  </button>
-                  <button disabled={isThinking} onClick={() => runTutorAction("trace")}>
-                    Traza
-                  </button>
+                  {!isExtremeStage && (
+                    <button disabled={isThinking} onClick={() => runTutorAction("hint")}>
+                      Pista
+                    </button>
+                  )}
+                  {!isExtremeStage && (
+                    <button disabled={isThinking} onClick={() => runTutorAction("correct")}>
+                      Corregir
+                    </button>
+                  )}
+                  {!isExtremeStage && (
+                    <button disabled={isThinking} onClick={() => runTutorAction("trace")}>
+                      Traza
+                    </button>
+                  )}
                   <button disabled={isThinking} className="exam" onClick={() => runTutorAction("exam")}>
-                    Evaluar parcial
+                    {isExtremeStage ? "Evaluar entrega" : "Evaluar parcial"}
                   </button>
-                  <button disabled={isThinking} className="quiet" onClick={() => runTutorAction("solution")}>
-                    Solucion
-                  </button>
+                  {!isExtremeStage && (
+                    <button disabled={isThinking} className="quiet" onClick={() => runTutorAction("solution")}>
+                      Solucion
+                    </button>
+                  )}
                   <button className="quiet" onClick={exportAttempt}>
                     Exportar .pas
                   </button>
@@ -1459,6 +1493,27 @@ function AutomationBar({
   );
 }
 
+function ExtremeModeBar({
+  onStart,
+  onSubmit,
+}: {
+  onStart: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <section className="extreme-bar" aria-label="Modo extremo">
+      <div>
+        <span>Nivel 6 extremo</span>
+        <strong>Sin codigo, sin pistas, con tiempo.</strong>
+      </div>
+      <button onClick={onStart}>Iniciar 90 min</button>
+      <button className="danger" onClick={onSubmit}>
+        Entregar parcial
+      </button>
+    </section>
+  );
+}
+
 function PathPanel({
   stages,
   selectedStage,
@@ -1492,6 +1547,7 @@ function PathPanel({
   dailyGoal: number;
   onOpenExercise: (exerciseId: string, reason: string) => void;
 }) {
+  const isExtreme = selectedStage.id === "extremo";
   const currentIndex = stageExercises.findIndex((exercise) => exercise.id === currentExercise.id);
   const firstIncompleteIndex = stageExercises.findIndex(
     (exercise) => !studyStats.completedLessons.includes(exercise.id),
@@ -1507,7 +1563,14 @@ function PathPanel({
     .slice(0, 3);
 
   const mission =
-    score >= 8 && examGoal
+    isExtreme
+      ? {
+          title: "Elegí un parcial y rendilo",
+          text: "Este nivel es para entrenar como examen real: hoja en blanco, tiempo, entrega final y rubrica.",
+          exercise: nextLesson ?? stageExercises[0],
+          action: "Rendir ahora",
+        }
+      : score >= 8 && examGoal
       ? {
           title: "Estas cerca: subi a formato parcial",
           text: "Tu intento actual viene fuerte. Ahora conviene practicar una consigna integradora y corregir con rubrica.",
@@ -1642,7 +1705,7 @@ function PathPanel({
             {stageExercises.map((exercise, index) => {
               const completed = studyStats.completedLessons.includes(exercise.id);
               const current = exercise.id === currentExercise.id;
-              const locked = index > nextUnlockedIndex;
+              const locked = !isExtreme && index > nextUnlockedIndex;
               return (
               <button
                 className={[
