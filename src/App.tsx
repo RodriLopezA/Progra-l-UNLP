@@ -24,7 +24,7 @@ import {
   saveTrace,
   type StudyStats,
 } from "./lib/storage";
-import { getTutorReply, type TutorAction } from "./lib/tutor";
+import { getFreeQuestionReply, getTutorReply, type TutorAction } from "./lib/tutor";
 import type { ChatMessage, ErrorRecord, ExamAttempt, Exercise, RubricCheck } from "./types";
 
 type TutorMode = "rules" | "gemini";
@@ -388,7 +388,7 @@ function App() {
           {
             id: crypto.randomUUID(),
             role: "tutor",
-            text: `${error instanceof Error ? error.message : "Gemini no respondio."}\n\nMientras tanto, mi lectura local: ${evaluation.message}`,
+            text: `${error instanceof Error ? error.message : "Gemini no respondio."}\n\nMientras tanto, uso el tutor local:\n${getFreeQuestionReply(selectedExercise, code, clean)}`,
           },
         ]);
       } finally {
@@ -397,10 +397,7 @@ function App() {
       return;
     }
 
-    appendTutorMessage(
-      clean,
-      `Te contesto con el tutor local: ${evaluation.message}\n\nPregunta para pensar: que variable cambia en cada vuelta y donde deberia actualizarse?`,
-    );
+    appendTutorMessage(clean, getFreeQuestionReply(selectedExercise, code, clean));
   };
 
   const checkGeminiConnection = async () => {
