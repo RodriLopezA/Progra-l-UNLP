@@ -8,6 +8,10 @@ function listItems(items: string[], empty = "todavia no detecte senales fuertes"
   return items.map((item) => `- ${item}`).join("\n");
 }
 
+function mergeItems(...groups: string[][]) {
+  return [...new Set(groups.flat())];
+}
+
 function getStageLabel(readiness: ReturnType<typeof analyzeAttempt>["readiness"]) {
   const labels = {
     "sin-intento": "Todavia no hay intento real",
@@ -18,6 +22,61 @@ function getStageLabel(readiness: ReturnType<typeof analyzeAttempt>["readiness"]
   };
 
   return labels[readiness];
+}
+
+function getTutorConfidenceLabel(confidence: ReturnType<typeof analyzeAttempt>["confidence"]) {
+  const labels = {
+    baja: "baja: necesito mas codigo o una traza para afirmarlo",
+    media: "media: hay senales utiles, pero todavia puede haber casos borde",
+    alta: "alta: el patron del error es bastante claro",
+  };
+
+  return labels[confidence];
+}
+
+function inferStudentIntent(exercise: Exercise, code: string) {
+  const analysis = analyzeAttempt(exercise, code);
+
+  if (analysis.readiness === "sin-intento") {
+    return "parece que todavia estas en la etapa de entender la consigna, no de programar";
+  }
+
+  if (exercise.topic.includes("lista") || exercise.topic === "insertar ordenado") {
+    if (analysis.detectedConcepts.includes("punteros")) {
+      return "parece que estas intentando resolverlo con recorrido de lista y punteros";
+    }
+    return "la consigna pide listas, pero tu intento todavia no muestra claramente el manejo de nodos";
+  }
+
+  if (exercise.topic === "matrices/tablas") {
+    return "parece que estas intentando mapear la consigna a una estructura indexada";
+  }
+
+  if (exercise.topic === "suma de digitos") {
+    return "parece que estas intentando separar el numero en partes, pero hay que verificar el avance";
+  }
+
+  if (exercise.topic === "vectores" || exercise.topic === "maximos y minimos") {
+    return "parece que estas armando un recorrido con comparaciones/acumuladores";
+  }
+
+  return "parece que ya hay una idea de modulo, pero falta comprobar si coincide con la consigna";
+}
+
+function buildSafetyGate(exercise: Exercise, code: string) {
+  const analysis = analyzeAttempt(exercise, code);
+  const blockers = mergeItems(
+    analysis.syntaxWarnings,
+    analysis.missingSignals,
+    analysis.strategyWarnings,
+  );
+
+  if (analysis.readiness === "aprobable") {
+    return "No veo una alarma grande, pero no lo daria por final sin una prueba de escritorio con caso chico y caso borde.";
+  }
+
+  return `No lo doy por aprobado todavia por esta puerta de seguridad:
+${listItems(blockers.slice(0, 4), "falta una prueba de escritorio para confirmar")}`;
 }
 
 function getTopicMicroAction(exercise: Exercise) {
@@ -76,19 +135,31 @@ function buildCorrectionReply(exercise: Exercise, code: string) {
   const result = evaluateCode(exercise, code);
   const analysis = analyzeAttempt(exercise, code);
   const pending = result.checks.filter((check) => check.status !== "ok").length;
+  const allWarnings = mergeItems(
+    analysis.syntaxWarnings,
+    analysis.missingSignals,
+    analysis.strategyWarnings,
+  );
   const rubric = result.checks
     .map((check) => `${check.status === "ok" ? "OK" : "Revisar"} - ${check.label}`)
     .join("\n");
 
   return {
-    text: `Lectura del intento
+    text: `Lectura inteligente del intento
 ${getStageLabel(analysis.readiness)}. Puntaje estimado: ${result.score}/10. Criterios pendientes: ${pending}.
+Confianza del diagnostico: ${getTutorConfidenceLabel(analysis.confidence)}.
+
+Hipotesis de lo que estas intentando
+${inferStudentIntent(exercise, code)}.
 
 Lo que ya aparece
 ${listItems(analysis.detectedConcepts)}
 
-Lo que falta o esta flojo
-${listItems(analysis.missingSignals, "no veo faltantes grandes, ahora hay que probar casos borde")}
+Alertas detectadas
+${listItems(allWarnings, "no veo alertas grandes, ahora hay que probar casos borde")}
+
+Puerta de seguridad
+${buildSafetyGate(exercise, code)}
 
 Correccion principal
 ${result.message}
@@ -164,6 +235,8 @@ export function getFreeQuestionReply(exercise: Exercise, code: string, question:
   const result = evaluateCode(exercise, code);
   const analysis = analyzeAttempt(exercise, code);
   const asksForSolution = /solucion|resolverlo completo|codigo completo|dame el codigo/i.test(question);
+  const asksIfCorrect = /esta bien|est[aá] bien|me aprueba|aprueba|corrige|corregi|nota|puntaje/i.test(question);
+  const asksForExplanation = /no entiendo|explica|explicame|por que|por qu[eé]|como hago|c[oó]mo hago/i.test(question);
 
   if (asksForSolution) {
     return `Puedo mostrarte la solucion solo desde el boton "Solucion", asi queda claro que la pediste explicitamente. Para estudiar mejor, antes te dejo el bloqueo actual: ${analysis.likelyBlocker}.
@@ -171,18 +244,48 @@ export function getFreeQuestionReply(exercise: Exercise, code: string, question:
 Pregunta para destrabar: ${analysis.nextQuestion}`;
   }
 
+  if (asksIfCorrect) {
+    return buildCorrectionReply(exercise, code).text;
+  }
+
+  if (asksForExplanation) {
+    return `Te explico sin resolverte todo.
+
+Mi hipotesis
+${inferStudentIntent(exercise, code)}.
+
+El centro del ejercicio
+${getTopicMicroAction(exercise)}
+
+Por donde seguir
+1. Escribi un caso mini.
+2. Anota las variables que cambian.
+3. Recien despues pasalo a Pascal.
+
+Ojo con esto
+${buildSafetyGate(exercise, code)}
+
+Pregunta del tutor
+${analysis.nextQuestion}`;
+  }
+
   return `Te respondo como tutor local avanzado.
 
 Diagnostico corto
 ${getStageLabel(analysis.readiness)}. Puntaje estimado si entregaras ahora: ${result.score}/10.
+Confianza: ${getTutorConfidenceLabel(analysis.confidence)}.
 
 Sobre tu pregunta
 ${question}
 
-Mi lectura: el punto mas importante ahora es "${analysis.likelyBlocker}". Si corregis eso, despues revisamos la rubrica fina.
+Mi lectura
+${inferStudentIntent(exercise, code)}. El punto mas importante ahora es "${analysis.likelyBlocker}". Si corregis eso, despues revisamos la rubrica fina.
 
 Senales que veo
 ${listItems(analysis.detectedConcepts)}
+
+Alertas
+${listItems(mergeItems(analysis.syntaxWarnings, analysis.missingSignals, analysis.strategyWarnings), "no veo una alerta fuerte, falta probar")}
 
 Proximo paso
 ${getTopicMicroAction(exercise)}
@@ -211,13 +314,22 @@ export function getTutorReply(
   if (action === "exam") {
     const result = buildExamFeedback(exercise, code);
     const analysis = analyzeAttempt(exercise, code);
+    const allWarnings = mergeItems(
+      analysis.syntaxWarnings,
+      analysis.missingSignals,
+      analysis.strategyWarnings,
+    );
     return {
       text: `${result.message}
 
 Lectura de tutor
 ${getStageLabel(analysis.readiness)}.
+Confianza del diagnostico: ${getTutorConfidenceLabel(analysis.confidence)}.
 Bloqueo principal: ${analysis.likelyBlocker}.
-Si esto fuera parcial, antes de entregar revisaria: ${analysis.missingSignals.slice(0, 3).join(", ") || "casos borde y prueba de escritorio"}.
+Si esto fuera parcial, antes de entregar revisaria: ${allWarnings.slice(0, 4).join(", ") || "casos borde y prueba de escritorio"}.
+
+Decision
+${result.score >= 8 && allWarnings.length === 0 ? "Aprobable, pero defendelo con una traza." : "No lo cierres todavia: hay riesgo real de perder puntos por estructura o logica."}
 
 Pregunta final de defensa oral
 ${analysis.nextQuestion}`,

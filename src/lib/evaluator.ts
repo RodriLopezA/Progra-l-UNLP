@@ -10,12 +10,16 @@ export type TutorResult = {
 export type AttemptAnalysis = {
   hasEnoughCode: boolean;
   hasPlaceholders: boolean;
+  isStarterOnly: boolean;
   statements: number;
   assignments: number;
   detectedConcepts: string[];
   missingSignals: string[];
+  syntaxWarnings: string[];
+  strategyWarnings: string[];
   likelyBlocker: string;
   nextQuestion: string;
+  confidence: "baja" | "media" | "alta";
   readiness: "sin-intento" | "incompleto" | "en-proceso" | "casi" | "aprobable";
 };
 
@@ -33,7 +37,8 @@ function realCodeStats(code: string) {
   const normalized = withoutComments.toLowerCase();
   const statements = (withoutComments.match(/;/g) ?? []).length;
   const assignments = (withoutComments.match(/:=/g) ?? []).length;
-  const placeholders = /completar|respuesta\s*[a-z]?\s*:|esqueleto|plan guiado/i.test(code);
+  const placeholders =
+    /completar|respuesta\s*[a-z]?\s*:|esqueleto|plan guiado|todo|aca va|pendiente/i.test(code);
 
   return {
     withoutComments,
@@ -53,18 +58,100 @@ function asksForTwoHighlightedValues(statement: string) {
   );
 }
 
+function normalizeCodeShape(code: string) {
+  return stripComments(code)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/\s*([;:,.()[\]=<>+\-*/])\s*/g, "$1")
+    .trim();
+}
+
+function isStarterOnlyAttempt(exercise: Exercise, code: string) {
+  const current = normalizeCodeShape(code);
+  const starter = normalizeCodeShape(exercise.starterCode);
+
+  if (!current) return true;
+  if (current === starter) return true;
+
+  const currentWithoutStarterWords = current
+    .replace(/\b(program|type|record|end|begin|var|const|procedure|function|integer|real|string|boolean)\b/g, "")
+    .replace(/[;:,.()[\]=<>+\-*/^]/g, "")
+    .trim();
+
+  return currentWithoutStarterWords.length < 18 && /completar|esqueleto|plan guiado/i.test(code);
+}
+
+function countMatches(code: string, pattern: RegExp) {
+  return (code.match(pattern) ?? []).length;
+}
+
+function findDeclaredFunctions(normalized: string) {
+  return [...normalized.matchAll(/\bfunction\s+([a-z_][a-z0-9_]*)\b/g)].map((match) => match[1]);
+}
+
+function inspectPascalShape(code: string) {
+  const normalized = stripComments(code).toLowerCase();
+  const warnings: string[] = [];
+  const beginCount = countMatches(normalized, /\bbegin\b/g);
+  const endCount = countMatches(normalized, /\bend\b/g);
+  const recordCount = countMatches(normalized, /\brecord\b/g);
+  const blockEndCount = Math.max(0, endCount - recordCount);
+  const openParens = countMatches(normalized, /\(/g);
+  const closeParens = countMatches(normalized, /\)/g);
+  const openBrackets = countMatches(normalized, /\[/g);
+  const closeBrackets = countMatches(normalized, /\]/g);
+
+  if (beginCount !== blockEndCount) {
+    warnings.push(`begin/end desbalanceados: veo ${beginCount} begin y ${blockEndCount} end de bloque`);
+  }
+
+  if (openParens !== closeParens) {
+    warnings.push(`parentesis desbalanceados: veo ${openParens} "(" y ${closeParens} ")"`);
+  }
+
+  if (openBrackets !== closeBrackets) {
+    warnings.push(`corchetes desbalanceados: veo ${openBrackets} "[" y ${closeBrackets} "]"`);
+  }
+
+  if (/\bwhile\b[^{;]*\bdo\b\s*;/.test(normalized)) {
+    warnings.push("hay un while con punto y coma justo despues del do; en Pascal eso suele vaciar el ciclo");
+  }
+
+  if (/\bif\b[^{;]*\bthen\b\s*;/.test(normalized)) {
+    warnings.push("hay un if con punto y coma justo despues del then; revisa ese corte");
+  }
+
+  if (/\belse\b/.test(normalized) && /\bthen\b[\s\S]{0,80};\s*else\b/.test(normalized)) {
+    warnings.push("puede haber un punto y coma antes de else; en Pascal eso suele romper el if");
+  }
+
+  return warnings;
+}
+
+function unique(items: string[]) {
+  return [...new Set(items)];
+}
+
 export function analyzeAttempt(exercise: Exercise, code: string): AttemptAnalysis {
   const stats = realCodeStats(code);
   const normalized = stats.normalized;
   const statement = exercise.statement.toLowerCase();
+  const rubricText = exercise.rubric.join(" ").toLowerCase();
+  const fullContext = `${statement} ${rubricText}`;
+  const starterOnly = isStarterOnlyAttempt(exercise, code);
+  const syntaxWarnings = inspectPascalShape(code);
   const detectedConcepts: string[] = [];
   const missingSignals: string[] = [];
+  const strategyWarnings: string[] = [];
 
   const addConcept = (condition: boolean, label: string) => {
     if (condition) detectedConcepts.push(label);
   };
   const addMissing = (condition: boolean, label: string) => {
     if (condition) missingSignals.push(label);
+  };
+  const addStrategy = (condition: boolean, label: string) => {
+    if (condition) strategyWarnings.push(label);
   };
 
   addConcept(/\bprogram\b/.test(normalized), "programa Pascal");
@@ -81,10 +168,14 @@ export function analyzeAttempt(exercise: Exercise, code: string): AttemptAnalysi
   addConcept(/\^/.test(normalized), "punteros");
   addConcept(/<> *nil|= *nil/.test(normalized), "control con nil");
   addConcept(/:=/.test(normalized), "asignaciones");
+  addConcept(/\bread(ln)?\b/.test(normalized), "lectura por teclado");
+  addConcept(/\bwrite(ln)?\b/.test(normalized), "salida por pantalla");
+  addConcept(/\bvar\b/.test(normalized), "variables locales");
 
-  addMissing(!stats.hasRealBody, "falta codigo real suficiente");
+  addMissing(!stats.hasRealBody || starterOnly, "falta codigo real suficiente");
   addMissing(stats.placeholders, "quedan marcadores sin completar");
   addMissing(!/\bbegin\b/.test(normalized) || !/\bend\b/.test(normalized), "estructura begin/end");
+  addMissing(syntaxWarnings.length > 0, "forma Pascal a revisar");
 
   if (exercise.topic.includes("lista") || exercise.topic === "insertar ordenado") {
     const advancesToNext = /:=\s*[^;]*\^\.sig/.test(normalized);
@@ -92,6 +183,11 @@ export function analyzeAttempt(exercise: Exercise, code: string): AttemptAnalysi
     addMissing(!/<> *nil|= *nil/.test(normalized), "condicion contra nil");
     addMissing(/\bwhile\b/.test(normalized) && !advancesToNext, "avance hacia sig");
     addMissing(statement.includes("liber") && !/\bdispose\s*\(/.test(normalized), "liberacion con dispose");
+  }
+
+  if (exercise.topic === "eliminar nodos") {
+    addMissing(!/\bdispose\s*\(/.test(normalized), "dispose del nodo eliminado");
+    addMissing(!/\^\.sig\s*:=|:=\s*[^;]*\^\.sig/.test(normalized), "reenlace de lista");
   }
 
   if (exercise.topic === "suma de digitos") {
@@ -112,18 +208,46 @@ export function analyzeAttempt(exercise: Exercise, code: string): AttemptAnalysi
   if (statement.includes("ordenada") || exercise.topic === "insertar ordenado") {
     addMissing(!/\bant\b|\banterior\b/.test(normalized), "puntero anterior");
     addMissing(!/\bact\b|\bactual\b/.test(normalized), "puntero actual");
+    addMissing(!/[<>=]\s*[^;]*(codigo|cod|legajo|dni|nombre|dato)|\^\.dato[\s\S]{0,80}[<>=]/.test(normalized), "comparacion para mantener orden");
   }
 
   if (statement.includes("una sola vez")) {
     addMissing(!/\bwhile\b|\bfor\b/.test(normalized), "recorrido principal unico");
+    addStrategy(countMatches(normalized, /\bwhile\b|\bfor\b/g) > 3, "la consigna pide una sola vez; revisa si estas recorriendo de mas");
   }
 
   if (asksForTwoHighlightedValues(statement)) {
     addMissing(!/max1|max2|min1|min2|codmax1|codmax2|posmax1|posmax2/.test(normalized), "dos maximos/minimos");
   }
 
+  if (/leer|carga|teclado|ingresar|ingresa/.test(fullContext)) {
+    addStrategy(!/\bread(ln)?\b/.test(normalized), "la consigna habla de carga por teclado y no veo read/readln");
+  }
+
+  if (/informar|mostrar|imprimir/.test(fullContext)) {
+    addStrategy(!/\bwrite(ln)?\b/.test(normalized), "la consigna pide informar y no veo write/writeln");
+  }
+
+  if (/corte|hasta|zzz|dni 0|0 como dni|finaliza/.test(fullContext)) {
+    addStrategy(!/\bwhile\b|\brepeat\b/.test(normalized), "parece haber condicion de corte y no veo ciclo condicional");
+  }
+
+  if (/valida|validar|no debe repetirse|no se repita|verificacion|patron/.test(fullContext)) {
+    addStrategy(!/\bfunction\b|\bprocedure\b/.test(normalized), "hay validacion pedida; conviene separarla en un modulo");
+  }
+
+  if (/tabla|precio|costo|matriz|categoria/.test(fullContext)) {
+    addStrategy(!/\[[^\]]+,[^\]]+\]/.test(normalized) && /\barray\b/.test(normalized), "si es tabla de dos dimensiones, revisa usar dos indices");
+  }
+
+  if (/por cada|cada sucursal|cada pais|cada pelicula|corte de control/.test(fullContext)) {
+    addStrategy(!/\banterior\b|\bactual\b|\bact\b|\bgrupo\b|\bcorte\b/.test(normalized), "puede requerir corte de control o acumular por grupo");
+  }
+
   const likelyBlocker =
+    syntaxWarnings[0] ??
     missingSignals[0] ??
+    strategyWarnings[0] ??
     (detectedConcepts.length === 0
       ? "todavia no aparece una estrategia de solucion"
       : "la estrategia general aparece, falta validar casos borde");
@@ -136,29 +260,42 @@ export function analyzeAttempt(exercise: Exercise, code: string): AttemptAnalysi
     }
     if (exercise.topic === "matrices/tablas") return "Que representa cada indice de la matriz y donde se reinicia el acumulador?";
     if (exercise.topic === "suma de digitos") return "Como cambia el numero despues de aplicar div 10?";
+    if (syntaxWarnings.length > 0) return "Que bloque begin/end o parentesis podes cerrar primero antes de seguir con la logica?";
     return "Con un caso de 2 o 3 datos, que valores toman tus variables principales?";
   })();
 
   const readiness: AttemptAnalysis["readiness"] =
-    !stats.hasRealBody
+    !stats.hasRealBody || starterOnly
       ? "sin-intento"
-      : stats.placeholders
+      : stats.placeholders || syntaxWarnings.length > 0
         ? "incompleto"
-        : missingSignals.length >= 3
+        : missingSignals.length + strategyWarnings.length >= 3
           ? "en-proceso"
-          : missingSignals.length > 0
+          : missingSignals.length + strategyWarnings.length > 0
             ? "casi"
             : "aprobable";
+  const confidence: AttemptAnalysis["confidence"] =
+    !stats.hasRealBody || starterOnly
+      ? "alta"
+      : syntaxWarnings.length > 0 || missingSignals.length > 2
+        ? "alta"
+        : strategyWarnings.length > 0
+          ? "media"
+          : "media";
 
   return {
     hasEnoughCode: stats.hasRealBody,
     hasPlaceholders: stats.placeholders,
+    isStarterOnly: starterOnly,
     statements: stats.statements,
     assignments: stats.assignments,
-    detectedConcepts,
-    missingSignals,
+    detectedConcepts: unique(detectedConcepts),
+    missingSignals: unique(missingSignals),
+    syntaxWarnings: unique(syntaxWarnings),
+    strategyWarnings: unique(strategyWarnings),
     likelyBlocker,
     nextQuestion,
+    confidence,
     readiness,
   };
 }
@@ -209,6 +346,7 @@ function inferChecks(exercise: Exercise, code: string): RubricCheck[] {
 export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   const stats = realCodeStats(code);
   const normalized = stats.normalized;
+  const analysis = analyzeAttempt(exercise, code);
   const errors: Omit<ErrorRecord, "id" | "createdAt">[] = [];
   let score = 10;
 
@@ -221,10 +359,10 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
     score -= penalty;
   };
 
-  if (stats.withoutComments.trim().length < 40 || !stats.hasRealBody) {
+  if (stats.withoutComments.trim().length < 40 || !stats.hasRealBody || analysis.isStarterOnly) {
     addError(
       "logica",
-      "Todavia no hay un intento suficiente para corregir. Veo muy poco codigo real fuera de comentarios.",
+      "Todavia no hay un intento suficiente para corregir. Veo muy poco codigo real fuera de comentarios o sigue siendo casi el esqueleto.",
       6,
     );
   }
@@ -245,10 +383,18 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
     );
   }
 
-  if (has(normalized, /\bfunction\b/) && !has(normalized, /[a-z0-9_]+ *:=/)) {
+  for (const warning of analysis.syntaxWarnings) {
+    addError("sintaxis", warning, 2);
+  }
+
+  const functionNames = findDeclaredFunctions(normalized);
+  const missingReturn = functionNames.find(
+    (name) => !new RegExp(`\\b${name}\\s*:=`).test(normalized),
+  );
+  if (missingReturn) {
     addError(
       "logica",
-      "Si es una funcion, revisa que asignes el valor de retorno al nombre de la funcion.",
+      `La funcion ${missingReturn} no parece asignar su valor de retorno. En Pascal se devuelve con ${missingReturn} := valor.`,
       2,
     );
   }
@@ -270,7 +416,7 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
       );
     }
 
-    if (has(normalized, /while/) && !has(normalized, /\:= .*?\^\.sig|:= *[a-z]+\^.sig/)) {
+    if (has(normalized, /while/) && !has(normalized, /:=\s*[^;]*\^\.sig/)) {
       addError(
         "punteros/listas",
         "Hay un while sobre lista, pero no veo claro el avance del puntero hacia ^.sig.",
@@ -293,6 +439,25 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
         "logica",
         "Para modificar enlaces conviene ubicar la posicion con dos punteros: anterior y actual.",
         1,
+      );
+    }
+
+    if (
+      exercise.topic === "insertar ordenado" &&
+      (!has(normalized, /\^\.sig\s*:=/) || !has(normalized, /nue\w*\^\.sig\s*:=/))
+    ) {
+      addError(
+        "punteros/listas",
+        "En insertar ordenado tienen que verse los dos enganches: el anterior apunta al nuevo y el nuevo apunta al actual.",
+        2,
+      );
+    }
+
+    if (exercise.topic === "eliminar nodos" && !has(normalized, /\bdispose\s*\(/)) {
+      addError(
+        "punteros/listas",
+        "Si eliminas nodos, ademas de reenlazar hace falta liberar el nodo eliminado con dispose.",
+        2,
       );
     }
   }
@@ -359,6 +524,10 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
     );
   }
 
+  for (const warning of analysis.strategyWarnings) {
+    addError("repaso", warning, 1);
+  }
+
   if (
     (exercise.topic === "matrices/tablas" || exercise.statement.toLowerCase().includes("tabla")) &&
     !has(normalized, /\barray\b|for .*to/)
@@ -384,6 +553,10 @@ export function evaluateCode(exercise: Exercise, code: string): TutorResult {
   const checks = inferChecks(exercise, code);
   const missingChecks = checks.filter((check) => check.status !== "ok").length;
   score -= Math.min(3, missingChecks);
+  if (analysis.readiness === "sin-intento") score = Math.min(score, 3);
+  if (analysis.readiness === "incompleto") score = Math.min(score, 5);
+  if (analysis.readiness === "en-proceso") score = Math.min(score, 7);
+  if (analysis.syntaxWarnings.length > 0) score = Math.min(score, 5);
   score = Math.max(1, Math.min(10, score));
 
   if (errors.length === 0 && missingChecks === 0 && stats.hasRealBody && !stats.placeholders) {
